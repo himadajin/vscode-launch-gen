@@ -1,8 +1,6 @@
-pub mod error;
 pub mod generator;
 
 // Re-export public APIs
-pub use error::GeneratorError;
 pub use generator::{ConfigFile, Generator, LaunchJson};
 
 #[cfg(test)]
