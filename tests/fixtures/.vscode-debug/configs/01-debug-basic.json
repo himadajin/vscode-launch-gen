@@ -1,0 +1,5 @@
+{
+  "extends": "cpp",
+  "name": "Debug Basic",
+  "args": []
+}

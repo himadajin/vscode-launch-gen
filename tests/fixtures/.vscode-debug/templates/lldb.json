@@ -1,0 +1,10 @@
+{
+  "type": "lldb",
+  "request": "launch",
+  "program": "${workspaceFolder}/build/bin/myapp",
+  "stopAtEntry": false,
+  "cwd": "${workspaceFolder}",
+  "environment": [],
+  "externalConsole": false,
+  "preLaunchTask": "build"
+}
