@@ -44,12 +44,14 @@ mod tests {
         let config1 = json!({
             "extends": "cpp",
             "name": "Basic Test",
+            "enabled": true,
             "args": ["--test"]
         });
 
         let config2 = json!({
             "extends": "cpp",
             "name": "Test with Input",
+            "enabled": true,
             "args": ["--input", "data.txt"],
             "cwd": "${workspaceFolder}/test"
         });
@@ -115,7 +117,8 @@ mod tests {
 
         let invalid_config = json!({
             "extends": "../other/template",
-            "name": "Invalid Test"
+            "name": "Invalid Test",
+            "enabled": true
         });
 
         let config_path = configs_dir.join("invalid.json");
@@ -150,6 +153,7 @@ mod tests {
         let config = ConfigFile {
             extends: "cpp".to_string(),
             name: "Test Config".to_string(),
+            enabled: true,
             extra: {
                 let mut map = std::collections::BTreeMap::new();
                 map.insert("args".to_string(), json!(["--test"]));
@@ -176,12 +180,14 @@ mod tests {
         let config1 = ConfigFile {
             extends: "cpp".to_string(),
             name: "Test".to_string(),
+            enabled: true,
             extra: std::collections::BTreeMap::new(),
         };
 
         let config2 = ConfigFile {
             extends: "cpp".to_string(),
             name: "Test".to_string(), // Duplicate name
+            enabled: true,
             extra: std::collections::BTreeMap::new(),
         };
 
@@ -245,6 +251,103 @@ mod tests {
         let config2 = &launch_json.configurations[1];
         assert_eq!(config2["name"], "Test with Input");
         assert_eq!(config2["cwd"], "${workspaceFolder}/test");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_disabled_config_excluded() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+
+        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&configs_dir)?;
+
+        // Create template
+        let template = json!({
+            "type": "cppdbg",
+            "program": "${workspaceFolder}/build/myapp"
+        });
+        fs::write(
+            templates_dir.join("cpp.json"),
+            serde_json::to_string_pretty(&template)?,
+        )?;
+
+        // Create enabled config
+        let enabled_config = json!({
+            "extends": "cpp",
+            "name": "Enabled Config",
+            "enabled": true,
+            "args": ["--enabled"]
+        });
+        fs::write(
+            configs_dir.join("enabled.json"),
+            serde_json::to_string_pretty(&enabled_config)?,
+        )?;
+
+        // Create disabled config
+        let disabled_config = json!({
+            "extends": "cpp",
+            "name": "Disabled Config",
+            "enabled": false,
+            "args": ["--disabled"]
+        });
+        fs::write(
+            configs_dir.join("disabled.json"),
+            serde_json::to_string_pretty(&disabled_config)?,
+        )?;
+
+        let generator = create_test_generator(&temp_dir);
+        generator.generate()?;
+
+        let output_path = temp_dir.path().join(".vscode/launch.json");
+        let content = fs::read_to_string(output_path)?;
+        let launch_json: LaunchJson = serde_json::from_str(&content)?;
+
+        // Only enabled config should be included
+        assert_eq!(launch_json.configurations.len(), 1);
+        assert_eq!(launch_json.configurations[0]["name"], "Enabled Config");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_all_configs_disabled_error() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+
+        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&configs_dir)?;
+
+        // Create template
+        let template = json!({
+            "type": "cppdbg",
+            "program": "${workspaceFolder}/build/myapp"
+        });
+        fs::write(
+            templates_dir.join("cpp.json"),
+            serde_json::to_string_pretty(&template)?,
+        )?;
+
+        // Create only disabled config
+        let disabled_config = json!({
+            "extends": "cpp",
+            "name": "Disabled Config",
+            "enabled": false,
+            "args": ["--disabled"]
+        });
+        fs::write(
+            configs_dir.join("disabled.json"),
+            serde_json::to_string_pretty(&disabled_config)?,
+        )?;
+
+        let generator = create_test_generator(&temp_dir);
+        let result = generator.generate();
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("No enabled configuration files found"));
 
         Ok(())
     }

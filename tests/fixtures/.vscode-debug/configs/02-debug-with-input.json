@@ -1,6 +1,7 @@
 {
   "extends": "cpp",
   "name": "Debug with Input",
+  "enabled": true,
   "args": ["--input", "test/data/sample.txt", "--verbose"],
   "cwd": "${workspaceFolder}/test",
   "environment": [

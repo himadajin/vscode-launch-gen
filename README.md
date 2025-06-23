@@ -51,6 +51,7 @@ Options:
    {
      "extends": "cpp",
      "name": "Basic Test",
+     "enabled": true,
      "args": ["--test"]
    }
    ```

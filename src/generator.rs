@@ -12,6 +12,8 @@ pub struct ConfigFile {
     pub extends: String,
     /// Unique configuration name displayed in VSCode
     pub name: String,
+    /// Whether this configuration is enabled
+    pub enabled: bool,
     /// Additional configuration fields that override template values
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -200,11 +202,23 @@ impl Generator {
             configs.push((config_path, config));
         }
 
-        self.validate_unique_names(&configs)?;
+        // Filter out disabled configurations before validation
+        let enabled_configs: Vec<_> = configs.into_iter()
+            .filter(|(_, config)| config.enabled)
+            .collect();
+
+        if enabled_configs.is_empty() {
+            anyhow::bail!(
+                "No enabled configuration files found in: {}",
+                self.configs_dir.display()
+            );
+        }
+
+        self.validate_unique_names(&enabled_configs)?;
 
         let mut configurations = Vec::new();
 
-        for (config_path, config) in configs {
+        for (config_path, config) in enabled_configs {
             let template = self
                 .load_template(&config.extends)
                 .with_context(|| format!("Error processing config: {}", config_path.display()))?;

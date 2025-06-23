@@ -1,0 +1,6 @@
+{
+  "extends": "cpp",
+  "name": "Debug Enabled",
+  "enabled": true,
+  "args": ["--enabled-test"]
+}

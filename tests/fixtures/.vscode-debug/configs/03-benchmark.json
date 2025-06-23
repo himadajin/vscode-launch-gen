@@ -1,6 +1,7 @@
 {
   "extends": "cpp",
   "name": "Benchmark",
+  "enabled": true,
   "args": ["--benchmark", "--iterations", "1000"],
   "environment": [
     {"name": "BENCHMARK_MODE", "value": "1"}

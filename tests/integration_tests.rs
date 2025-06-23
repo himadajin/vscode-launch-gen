@@ -60,11 +60,13 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
         ("01-debug-basic.json", json!({
             "extends": "cpp",
             "name": "Debug Basic",
+            "enabled": true,
             "args": []
         })),
         ("02-debug-with-input.json", json!({
             "extends": "cpp",
             "name": "Debug with Input",
+            "enabled": true,
             "args": ["--input", "test/data/sample.txt", "--verbose"],
             "cwd": "${workspaceFolder}/test",
             "environment": [
@@ -75,6 +77,7 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
         ("03-benchmark.json", json!({
             "extends": "cpp",
             "name": "Benchmark",
+            "enabled": true,
             "args": ["--benchmark", "--iterations", "1000"],
             "environment": [
                 {"name": "BENCHMARK_MODE", "value": "1"}
@@ -83,6 +86,7 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
         ("04-lldb-debug.json", json!({
             "extends": "lldb",
             "name": "LLDB Debug",
+            "enabled": true,
             "args": ["--debug"]
         }))
     ];
@@ -207,12 +211,14 @@ fn test_error_duplicate_names() -> Result<()> {
     // Create two configs with same name
     let config1 = json!({
         "extends": "cpp",
-        "name": "Duplicate Name"
+        "name": "Duplicate Name",
+        "enabled": true
     });
     
     let config2 = json!({
         "extends": "cpp", 
-        "name": "Duplicate Name"
+        "name": "Duplicate Name",
+        "enabled": true
     });
     
     fs::write(
@@ -247,7 +253,8 @@ fn test_error_invalid_extends() -> Result<()> {
     // Create config with invalid extends path
     let config = json!({
         "extends": "../other/template",
-        "name": "Invalid Test"
+        "name": "Invalid Test",
+        "enabled": true
     });
     
     fs::write(
