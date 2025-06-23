@@ -1,9 +1,11 @@
 {
-  "extends": "cpp",
   "name": "Benchmark",
+  "extends": "cpp",
   "enabled": true,
-  "args": ["--benchmark", "--iterations", "1000"],
-  "environment": [
-    {"name": "BENCHMARK_MODE", "value": "1"}
-  ]
+  "config": {
+    "args": ["--benchmark", "--iterations", "1000"],
+    "environment": [
+      {"name": "BENCHMARK_MODE", "value": "1"}
+    ]
+  }
 }

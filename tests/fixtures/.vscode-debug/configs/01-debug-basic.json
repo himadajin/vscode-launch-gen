@@ -1,6 +1,8 @@
 {
-  "extends": "cpp",
   "name": "Debug Basic",
+  "extends": "cpp",
   "enabled": true,
-  "args": []
+  "config": {
+    "args": []
+  }
 }

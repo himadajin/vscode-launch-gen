@@ -49,10 +49,12 @@ Options:
 3. Create configuration files (`configs/basic-test.json`):
    ```json
    {
-     "extends": "cpp",
      "name": "Basic Test",
+     "extends": "cpp",
      "enabled": true,
-     "args": ["--test"]
+     "config": {
+       "args": ["--test"]
+     }
    }
    ```
 
@@ -94,3 +96,37 @@ vscode-launch-gen --dir ./debug-configs
 ```bash
 vscode-launch-gen --output ./custom/.vscode/launch.json
 ```
+
+### Verbose output
+```bash
+vscode-launch-gen --verbose
+```
+
+## Configuration File Format
+
+Each configuration file in the `configs/` directory must include the following required fields:
+
+- **`name`**: Unique configuration name displayed in VSCode
+- **`extends`**: Template name to use (without .json extension)
+- **`enabled`**: Boolean flag to enable/disable this configuration
+- **`config`**: Object containing debug configuration properties that override template values
+  - Additional debug properties like `args`, `cwd`, `environment`, etc.
+
+### Enabling/Disabling Configurations
+
+You can temporarily disable configurations by setting `enabled: false`:
+
+```json
+{
+  "name": "Disabled Test",
+  "extends": "cpp",
+  "enabled": false,
+  "config": {
+    "args": ["--test"]
+  }
+}
+```
+
+Disabled configurations will be ignored during generation and won't appear in the final `launch.json` file.
+
+This tool is designed to be simple and focused, making it easy to manage multiple debug configurations for your development workflow.

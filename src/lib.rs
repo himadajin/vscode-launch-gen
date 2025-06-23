@@ -42,18 +42,22 @@ mod tests {
 
         // Create config files
         let config1 = json!({
-            "extends": "cpp",
             "name": "Basic Test",
+            "extends": "cpp",
             "enabled": true,
-            "args": ["--test"]
+            "config": {
+                "args": ["--test"]
+            }
         });
 
         let config2 = json!({
-            "extends": "cpp",
             "name": "Test with Input",
+            "extends": "cpp",
             "enabled": true,
-            "args": ["--input", "data.txt"],
-            "cwd": "${workspaceFolder}/test"
+            "config": {
+                "args": ["--input", "data.txt"],
+                "cwd": "${workspaceFolder}/test"
+            }
         });
 
         fs::write(
@@ -104,7 +108,7 @@ mod tests {
 
         assert_eq!(config.extends, "cpp");
         assert_eq!(config.name, "Basic Test");
-        assert_eq!(config.extra["args"], json!(["--test"]));
+        assert_eq!(config.config["args"], json!(["--test"]));
 
         Ok(())
     }
@@ -116,9 +120,10 @@ mod tests {
         fs::create_dir_all(&configs_dir)?;
 
         let invalid_config = json!({
-            "extends": "../other/template",
             "name": "Invalid Test",
-            "enabled": true
+            "extends": "../other/template",
+            "enabled": true,
+            "config": {}
         });
 
         let config_path = configs_dir.join("invalid.json");
@@ -151,10 +156,10 @@ mod tests {
         });
 
         let config = ConfigFile {
-            extends: "cpp".to_string(),
             name: "Test Config".to_string(),
+            extends: "cpp".to_string(),
             enabled: true,
-            extra: {
+            config: {
                 let mut map = std::collections::BTreeMap::new();
                 map.insert("args".to_string(), json!(["--test"]));
                 map.insert("cwd".to_string(), json!("${workspaceFolder}/test"));
@@ -178,17 +183,17 @@ mod tests {
         let generator = create_test_generator(&temp_dir);
 
         let config1 = ConfigFile {
-            extends: "cpp".to_string(),
             name: "Test".to_string(),
+            extends: "cpp".to_string(),
             enabled: true,
-            extra: std::collections::BTreeMap::new(),
+            config: std::collections::BTreeMap::new(),
         };
 
         let config2 = ConfigFile {
-            extends: "cpp".to_string(),
             name: "Test".to_string(), // Duplicate name
+            extends: "cpp".to_string(),
             enabled: true,
-            extra: std::collections::BTreeMap::new(),
+            config: std::collections::BTreeMap::new(),
         };
 
         let configs = vec![
@@ -276,10 +281,12 @@ mod tests {
 
         // Create enabled config
         let enabled_config = json!({
-            "extends": "cpp",
             "name": "Enabled Config",
+            "extends": "cpp",
             "enabled": true,
-            "args": ["--enabled"]
+            "config": {
+                "args": ["--enabled"]
+            }
         });
         fs::write(
             configs_dir.join("enabled.json"),
@@ -288,10 +295,12 @@ mod tests {
 
         // Create disabled config
         let disabled_config = json!({
-            "extends": "cpp",
             "name": "Disabled Config",
+            "extends": "cpp",
             "enabled": false,
-            "args": ["--disabled"]
+            "config": {
+                "args": ["--disabled"]
+            }
         });
         fs::write(
             configs_dir.join("disabled.json"),
@@ -333,10 +342,12 @@ mod tests {
 
         // Create only disabled config
         let disabled_config = json!({
-            "extends": "cpp",
             "name": "Disabled Config",
+            "extends": "cpp",
             "enabled": false,
-            "args": ["--disabled"]
+            "config": {
+                "args": ["--disabled"]
+            }
         });
         fs::write(
             configs_dir.join("disabled.json"),
@@ -347,7 +358,12 @@ mod tests {
         let result = generator.generate();
 
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("No enabled configuration files found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No enabled configuration files found")
+        );
 
         Ok(())
     }

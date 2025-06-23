@@ -58,36 +58,44 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
     // Create config files (will be sorted alphabetically)
     let configs = vec![
         ("01-debug-basic.json", json!({
-            "extends": "cpp",
             "name": "Debug Basic",
+            "extends": "cpp",
             "enabled": true,
-            "args": []
+            "config": {
+                "args": []
+            }
         })),
         ("02-debug-with-input.json", json!({
-            "extends": "cpp",
             "name": "Debug with Input",
+            "extends": "cpp",
             "enabled": true,
-            "args": ["--input", "test/data/sample.txt", "--verbose"],
-            "cwd": "${workspaceFolder}/test",
-            "environment": [
-                {"name": "DEBUG_LEVEL", "value": "3"}
-            ],
-            "console": "integratedTerminal"
+            "config": {
+                "args": ["--input", "test/data/sample.txt", "--verbose"],
+                "cwd": "${workspaceFolder}/test",
+                "environment": [
+                    {"name": "DEBUG_LEVEL", "value": "3"}
+                ],
+                "console": "integratedTerminal"
+            }
         })),
         ("03-benchmark.json", json!({
-            "extends": "cpp",
             "name": "Benchmark",
+            "extends": "cpp",
             "enabled": true,
-            "args": ["--benchmark", "--iterations", "1000"],
-            "environment": [
-                {"name": "BENCHMARK_MODE", "value": "1"}
-            ]
+            "config": {
+                "args": ["--benchmark", "--iterations", "1000"],
+                "environment": [
+                    {"name": "BENCHMARK_MODE", "value": "1"}
+                ]
+            }
         })),
         ("04-lldb-debug.json", json!({
-            "extends": "lldb",
             "name": "LLDB Debug",
+            "extends": "lldb",
             "enabled": true,
-            "args": ["--debug"]
+            "config": {
+                "args": ["--debug"]
+            }
         }))
     ];
     
@@ -169,8 +177,11 @@ fn test_error_missing_template() -> Result<()> {
     
     // Create config that references non-existent template
     let config = json!({
+        "name": "Test",
         "extends": "nonexistent",
-        "name": "Test"
+        "enabled": true,
+        "config": {
+        }
     });
     
     fs::write(
@@ -210,15 +221,19 @@ fn test_error_duplicate_names() -> Result<()> {
     
     // Create two configs with same name
     let config1 = json!({
-        "extends": "cpp",
         "name": "Duplicate Name",
-        "enabled": true
+        "extends": "cpp",
+        "enabled": true,
+        "config": {
+        }
     });
     
     let config2 = json!({
-        "extends": "cpp", 
         "name": "Duplicate Name",
-        "enabled": true
+        "extends": "cpp",
+        "enabled": true,
+        "config": {
+        }
     });
     
     fs::write(
@@ -252,9 +267,11 @@ fn test_error_invalid_extends() -> Result<()> {
     
     // Create config with invalid extends path
     let config = json!({
-        "extends": "../other/template",
         "name": "Invalid Test",
-        "enabled": true
+        "extends": "../other/template",
+        "enabled": true,
+        "config": {
+        }
     });
     
     fs::write(

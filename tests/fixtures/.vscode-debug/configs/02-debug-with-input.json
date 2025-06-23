@@ -1,11 +1,13 @@
 {
-  "extends": "cpp",
   "name": "Debug with Input",
+  "extends": "cpp",
   "enabled": true,
-  "args": ["--input", "test/data/sample.txt", "--verbose"],
-  "cwd": "${workspaceFolder}/test",
-  "environment": [
-    {"name": "DEBUG_LEVEL", "value": "3"}
-  ],
-  "console": "integratedTerminal"
+  "config": {
+    "args": ["--input", "test/data/sample.txt", "--verbose"],
+    "cwd": "${workspaceFolder}/test",
+    "environment": [
+      {"name": "DEBUG_LEVEL", "value": "3"}
+    ],
+    "console": "integratedTerminal"
+  }
 }

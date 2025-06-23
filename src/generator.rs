@@ -8,15 +8,14 @@ use std::path::{Path, PathBuf};
 /// Individual configuration file structure with template reference and overrides
 #[derive(Debug, Deserialize)]
 pub struct ConfigFile {
-    /// Template name to extend (without .json extension)
-    pub extends: String,
     /// Unique configuration name displayed in VSCode
     pub name: String,
+    /// Template name to extend (without .json extension)
+    pub extends: String,
     /// Whether this configuration is enabled
     pub enabled: bool,
-    /// Additional configuration fields that override template values
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, Value>,
+    /// Debug configuration that overrides template values
+    pub config: BTreeMap<String, Value>,
 }
 
 /// VSCode launch.json file structure
@@ -97,9 +96,11 @@ impl Generator {
             anyhow::bail!("Template must be a JSON object");
         };
 
+        // Insert the name field from the top-level config
         merged.insert("name".to_string(), Value::String(config.name));
 
-        for (key, value) in config.extra {
+        // Insert all other configuration fields
+        for (key, value) in config.config {
             merged.insert(key, value);
         }
 
@@ -203,7 +204,8 @@ impl Generator {
         }
 
         // Filter out disabled configurations before validation
-        let enabled_configs: Vec<_> = configs.into_iter()
+        let enabled_configs: Vec<_> = configs
+            .into_iter()
             .filter(|(_, config)| config.enabled)
             .collect();
 
