@@ -46,24 +46,32 @@ Options:
    }
    ```
 
-3. Create configuration files (`configs/basic-test.json`):
+3. Create baseArgs file (`launch/test1/args.json`):
+
+   ```json
+   {
+     "args": ["-v", "-o", "output.txt", "input.txt"]
+   }
+   ```
+
+4. Create configuration files (`configs/basic-test.json`):
+
    ```json
    {
      "name": "Basic Test",
      "extends": "cpp",
      "enabled": true,
-     "config": {
-       "args": ["--test"]
-     }
+     "baseArgs": "/path/to/args.json",
+     "args": ["--debug-mode"]
    }
    ```
 
-4. Run the tool:
+5. Run the tool:
    ```bash
    vscode-launch-gen
    ```
 
-5. The tool generates `.vscode/launch.json`:
+6. The tool generates `.vscode/launch.json`:
    ```json
    {
      "version": "0.2.0",
@@ -74,7 +82,13 @@ Options:
          "request": "launch",
          "program": "${workspaceFolder}/build/myapp",
          "MIMode": "gdb",
-         "args": ["--test"]
+         "args": "args": [
+            "-v",
+            "-o",
+            "output.txt",
+            "input.txt",
+            "--debug-mode"
+         ]
        }
      ]
    }
@@ -83,21 +97,25 @@ Options:
 ## Examples
 
 ### Basic usage
+
 ```bash
 vscode-launch-gen
 ```
 
 ### Custom configuration directory
+
 ```bash
 vscode-launch-gen --dir ./debug-configs
 ```
 
 ### Custom output path
+
 ```bash
 vscode-launch-gen --output ./custom/.vscode/launch.json
 ```
 
 ### Verbose output
+
 ```bash
 vscode-launch-gen --verbose
 ```
