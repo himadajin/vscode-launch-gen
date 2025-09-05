@@ -134,7 +134,8 @@ fn test_full_generation_process() -> Result<()> {
     let temp_dir = TempDir::new()?;
     create_test_files(temp_dir.path())?;
 
-    let generator = Generator::new(temp_dir.path().join(".vscode-debug"));
+    let base = temp_dir.path().join(".vscode-debug");
+    let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let launch = generator.generate()?;
     let v: serde_json::Value = serde_json::to_value(&launch)?;
@@ -205,7 +206,8 @@ fn test_error_missing_template() -> Result<()> {
 
     write_json(configs_dir.join("test.json"), &config)?;
 
-    let generator = Generator::new(temp_dir.path().join(".vscode-debug"));
+    let base = temp_dir.path().join(".vscode-debug");
+    let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let result = generator.generate();
     assert!(result.is_err());
@@ -243,7 +245,8 @@ fn test_error_duplicate_names() -> Result<()> {
     write_json(configs_dir.join("config1.json"), &config1)?;
     write_json(configs_dir.join("config2.json"), &config2)?;
 
-    let generator = Generator::new(temp_dir.path().join(".vscode-debug"));
+    let base = temp_dir.path().join(".vscode-debug");
+    let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let result = generator.generate();
     assert!(result.is_err());
@@ -294,7 +297,8 @@ fn test_empty_configs_directory() -> Result<()> {
     let template = json!({"type": "cppdbg"});
     write_json(templates_dir.join("cpp.json"), &template)?;
 
-    let generator = Generator::new(temp_dir.path().join(".vscode-debug"));
+    let base = temp_dir.path().join(".vscode-debug");
+    let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let result = generator.generate();
     assert!(result.is_err());

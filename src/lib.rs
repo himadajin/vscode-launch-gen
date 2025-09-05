@@ -14,8 +14,8 @@ mod tests {
     use tempfile::TempDir;
 
     fn create_test_generator(temp_dir: &TempDir) -> Generator {
-        let config_dir = temp_dir.path().join(".vscode-debug");
-        Generator::new(config_dir)
+        let base = temp_dir.path().join(".vscode-debug");
+        Generator::new(base.join("templates"), base.join("configs"))
     }
 
     fn setup_test_files(temp_dir: &TempDir) -> anyhow::Result<()> {

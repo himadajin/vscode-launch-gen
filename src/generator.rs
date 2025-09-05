@@ -106,19 +106,14 @@ impl LaunchJson {
 
 /// Main generator for creating VSCode launch.json from templates and configs
 pub struct Generator {
-    config_dir: PathBuf,
     templates_dir: PathBuf,
     configs_dir: PathBuf,
 }
 
 impl Generator {
-    /// Creates a new generator instance with directory paths
-    pub fn new(config_dir: PathBuf) -> Self {
-        let templates_dir = config_dir.join("templates");
-        let configs_dir = config_dir.join("configs");
-
+    /// Creates a new generator instance with explicit templates/configs directories
+    pub fn new(templates_dir: PathBuf, configs_dir: PathBuf) -> Self {
         Self {
-            config_dir,
             templates_dir,
             configs_dir,
         }
@@ -130,13 +125,6 @@ impl Generator {
 
     /// Main generation process - reads configs, merges with templates, and returns LaunchJson
     pub fn generate(&self) -> Result<LaunchJson> {
-        if !self.config_dir.exists() {
-            anyhow::bail!(
-                "Config directory does not exist: {}",
-                self.config_dir.display()
-            );
-        }
-
         if !self.templates_dir.exists() {
             anyhow::bail!(
                 "Templates directory does not exist: {}",

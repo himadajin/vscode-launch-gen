@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let output_path = cli.output.clone();
-    let generator = Generator::new(cli.dir);
+    let generator = Generator::new(cli.dir.join("templates"), cli.dir.join("configs"));
 
     let launch = generator.generate()?;
 
