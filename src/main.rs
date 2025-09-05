@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
-use std::path::PathBuf;
+use serde_json::to_string_pretty;
 use std::fs;
 use std::io::Write;
-use serde_json::to_string_pretty;
+use std::path::PathBuf;
 use vscode_launch_gen::Generator;
 
 /// Command line interface for VSCode launch.json generator

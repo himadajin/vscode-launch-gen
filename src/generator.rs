@@ -193,17 +193,16 @@ impl Generator {
 /// Collects all JSON config files from `configs_dir` in alphabetical order
 pub(crate) fn collect_config_files(configs_dir: &Path) -> Result<Vec<(PathBuf, ConfigFile)>> {
     if !configs_dir.exists() {
-        anyhow::bail!(
-            "Config directory does not exist: {}",
-            configs_dir.display()
-        );
+        anyhow::bail!("Config directory does not exist: {}", configs_dir.display());
     }
 
     let mut config_files: Vec<PathBuf> = Vec::new();
 
     for entry in fs::read_dir(configs_dir).with_context(|| {
-        format!("Failed to read configs directory: {}",
-            configs_dir.display())
+        format!(
+            "Failed to read configs directory: {}",
+            configs_dir.display()
+        )
     })? {
         let entry = entry?;
         let path = entry.path();
