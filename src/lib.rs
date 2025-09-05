@@ -40,24 +40,19 @@ mod tests {
             serde_json::to_string_pretty(&template)?,
         )?;
 
-        // Create config files
+        // Create config files (new schema with top-level args)
         let config1 = json!({
             "name": "Basic Test",
             "extends": "cpp",
             "enabled": true,
-            "config": {
-                "args": ["--test"]
-            }
+            "args": ["--test"]
         });
 
         let config2 = json!({
             "name": "Test with Input",
             "extends": "cpp",
             "enabled": true,
-            "config": {
-                "args": ["--input", "data.txt"],
-                "cwd": "${workspaceFolder}/test"
-            }
+            "args": ["--input", "data.txt"]
         });
 
         fs::write(
@@ -108,7 +103,7 @@ mod tests {
 
         assert_eq!(config.extends, "cpp");
         assert_eq!(config.name, "Basic Test");
-        assert_eq!(config.config["args"], json!(["--test"]));
+        assert_eq!(config.args.as_ref().unwrap(), &vec!["--test".to_string()]);
 
         Ok(())
     }
@@ -122,8 +117,7 @@ mod tests {
         let invalid_config = json!({
             "name": "Invalid Test",
             "extends": "../other/template",
-            "enabled": true,
-            "config": {}
+            "enabled": true
         });
 
         let config_path = configs_dir.join("invalid.json");
@@ -159,12 +153,8 @@ mod tests {
             name: "Test Config".to_string(),
             extends: "cpp".to_string(),
             enabled: true,
-            config: {
-                let mut map = std::collections::BTreeMap::new();
-                map.insert("args".to_string(), json!(["--test"]));
-                map.insert("cwd".to_string(), json!("${workspaceFolder}/test"));
-                map
-            },
+            base_args: None,
+            args: Some(vec!["--test".to_string()]),
         };
 
         let merged = generator.merge_config(template, config)?;
@@ -172,7 +162,6 @@ mod tests {
         assert_eq!(merged["name"], "Test Config");
         assert_eq!(merged["type"], "cppdbg");
         assert_eq!(merged["args"], json!(["--test"]));
-        assert_eq!(merged["cwd"], "${workspaceFolder}/test"); // Should be overwritten
 
         Ok(())
     }
@@ -186,14 +175,16 @@ mod tests {
             name: "Test".to_string(),
             extends: "cpp".to_string(),
             enabled: true,
-            config: std::collections::BTreeMap::new(),
+            base_args: None,
+            args: None,
         };
 
         let config2 = ConfigFile {
             name: "Test".to_string(), // Duplicate name
             extends: "cpp".to_string(),
             enabled: true,
-            config: std::collections::BTreeMap::new(),
+            base_args: None,
+            args: None,
         };
 
         let configs = vec![
@@ -255,7 +246,7 @@ mod tests {
         // Check second configuration
         let config2 = &launch_json.configurations[1];
         assert_eq!(config2["name"], "Test with Input");
-        assert_eq!(config2["cwd"], "${workspaceFolder}/test");
+        assert_eq!(config2["args"], json!(["--input", "data.txt"]));
 
         Ok(())
     }
@@ -284,9 +275,7 @@ mod tests {
             "name": "Enabled Config",
             "extends": "cpp",
             "enabled": true,
-            "config": {
-                "args": ["--enabled"]
-            }
+            "args": ["--enabled"]
         });
         fs::write(
             configs_dir.join("enabled.json"),
@@ -298,9 +287,7 @@ mod tests {
             "name": "Disabled Config",
             "extends": "cpp",
             "enabled": false,
-            "config": {
-                "args": ["--disabled"]
-            }
+            "args": ["--disabled"]
         });
         fs::write(
             configs_dir.join("disabled.json"),
@@ -345,9 +332,7 @@ mod tests {
             "name": "Disabled Config",
             "extends": "cpp",
             "enabled": false,
-            "config": {
-                "args": ["--disabled"]
-            }
+            "args": ["--disabled"]
         });
         fs::write(
             configs_dir.join("disabled.json"),

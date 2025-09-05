@@ -14,8 +14,11 @@ pub struct ConfigFile {
     pub extends: String,
     /// Whether this configuration is enabled
     pub enabled: bool,
-    /// Debug configuration that overrides template values
-    pub config: BTreeMap<String, Value>,
+    /// Optional path to a JSON file containing base args, e.g., { "args": ["..."] }
+    #[serde(rename = "baseArgs")]
+    pub base_args: Option<PathBuf>,
+    /// Additional args to append after base args
+    pub args: Option<Vec<String>>,
 }
 
 /// VSCode launch.json file structure
@@ -88,6 +91,31 @@ impl Generator {
         Ok(config)
     }
 
+    /// Load base args from a JSON file that contains { "args": [ ... ] }
+    fn load_base_args(&self, path: &Path) -> Result<Vec<String>> {
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read baseArgs file: {}", path.display()))?;
+        let v: Value = serde_json::from_str(&content)
+            .with_context(|| format!("Failed to parse baseArgs JSON: {}", path.display()))?;
+        let args = v.get("args").and_then(|a| a.as_array()).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Invalid baseArgs format in {}: missing 'args' array",
+                path.display()
+            )
+        })?;
+        let mut out = Vec::with_capacity(args.len());
+        for item in args {
+            match item.as_str() {
+                Some(s) => out.push(s.to_string()),
+                None => anyhow::bail!(
+                    "Invalid baseArgs format in {}: 'args' must be an array of strings",
+                    path.display()
+                ),
+            }
+        }
+        Ok(out)
+    }
+
     /// Merges template and config, with config values overriding template values
     pub fn merge_config(&self, template: Value, config: ConfigFile) -> Result<Value> {
         let mut merged = if let Value::Object(template_obj) = template {
@@ -99,9 +127,17 @@ impl Generator {
         // Insert the name field from the top-level config
         merged.insert("name".to_string(), Value::String(config.name));
 
-        // Insert all other configuration fields
-        for (key, value) in config.config {
-            merged.insert(key, value);
+        // Build args: baseArgs (if any) + args (if any)
+        let mut final_args: Vec<String> = Vec::new();
+        if let Some(base_path) = &config.base_args {
+            let base = self.load_base_args(base_path)?;
+            final_args.extend(base);
+        }
+        if let Some(extra) = &config.args {
+            final_args.extend(extra.clone());
+        }
+        if config.args.is_some() || config.base_args.is_some() {
+            merged.insert("args".to_string(), serde_json::json!(final_args));
         }
 
         Ok(Value::Object(merged))
