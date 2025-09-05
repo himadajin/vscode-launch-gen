@@ -24,7 +24,7 @@ pub struct LaunchConfig {
 }
 
 #[derive(Debug, Serialize)]
-struct WriteLaunchJson {
+struct LaunchJson {
     version: String,
     configurations: Vec<LaunchConfig>,
 }
@@ -177,7 +177,7 @@ impl Generator {
             configurations.push(merged);
         }
 
-        let launch_json = WriteLaunchJson {
+        let launch_json = LaunchJson {
             version: "0.2.0".to_string(),
             configurations,
         };
