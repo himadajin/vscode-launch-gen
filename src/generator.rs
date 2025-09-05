@@ -30,6 +30,71 @@ struct LaunchJson {
     configurations: Vec<LaunchConfig>,
 }
 
+/// Resolves `ConfigFile` into `LaunchConfig` using templates directory context.
+pub struct Resolver {
+    templates_dir: PathBuf,
+}
+
+impl Resolver {
+    pub fn new(templates_dir: PathBuf) -> Self {
+        Self { templates_dir }
+    }
+
+    /// Build a configuration from templates dir and ConfigFile.
+    /// If `template_override` is provided, it is used instead of reading from disk.
+    pub fn resolve(
+        &self,
+        config: ConfigFile,
+        template_override: Option<Value>,
+    ) -> Result<LaunchConfig> {
+        let tmpl = match template_override {
+            Some(v) => TemplateFile::from_value(v)?,
+            None => {
+                let template_path = self.templates_dir.join(format!("{}.json", config.extends));
+                TemplateFile::from_path(&template_path)?
+            }
+        };
+        self.build_from_template(config, tmpl)
+    }
+
+    /// Build a configuration from an already-parsed TemplateFile and ConfigFile.
+    pub(crate) fn resolve_with_template(
+        &self,
+        config: ConfigFile,
+        tmpl: TemplateFile,
+    ) -> Result<LaunchConfig> {
+        self.build_from_template(config, tmpl)
+    }
+
+    fn build_from_template(&self, config: ConfigFile, tmpl: TemplateFile) -> Result<LaunchConfig> {
+        // Build args: baseArgs (if any) + args (if any). Always present (can be empty)
+        let mut args: Vec<String> = Vec::new();
+        if let Some(base_path) = &config.base_args {
+            let base = BaseArgsFile::from_path(base_path)?;
+            args.extend(base.args);
+        }
+        if let Some(extra) = &config.args {
+            args.extend(extra.clone());
+        }
+
+        // Sanity check: templates must not provide args (enforced at parse time)
+        debug_assert!(
+            !tmpl.rest.contains_key("args"),
+            "Template rest must not contain 'args'"
+        );
+
+        Ok(LaunchConfig {
+            type_field: tmpl.type_field,
+            request: tmpl.request,
+            name: config.name,
+            program: tmpl.program,
+            args,
+            stop_at_entry: tmpl.stop_at_entry,
+            rest: tmpl.rest.clone(),
+        })
+    }
+}
+
 /// Main generator for creating VSCode launch.json from templates and configs
 pub struct Generator {
     config_dir: PathBuf,
@@ -55,7 +120,8 @@ impl Generator {
     /// Merges template and config and returns a JSON value (for tests and intermediate checks)
     pub fn merge_config(&self, template: Value, config: ConfigFile) -> Result<Value> {
         let tmpl = TemplateFile::from_value(template)?;
-        let ordered = LaunchConfig::from_template_and_config_with_template(config, tmpl)?;
+        let resolver = Resolver::new(self.templates_dir.clone());
+        let ordered = resolver.resolve_with_template(config, tmpl)?;
         Ok(serde_json::to_value(ordered)?)
     }
 
@@ -171,9 +237,11 @@ impl Generator {
         self.validate_unique_names(&enabled_configs)?;
 
         let mut configurations: Vec<LaunchConfig> = Vec::new();
+        let resolver = Resolver::new(self.templates_dir.clone());
 
         for (config_path, config) in enabled_configs {
-            let merged = LaunchConfig::from_template_and_config(&self.templates_dir, config, None)
+            let merged = resolver
+                .resolve(config, None)
                 .with_context(|| format!("Error processing config: {}", config_path.display()))?;
             configurations.push(merged);
         }
@@ -200,75 +268,15 @@ impl Generator {
 }
 
 impl LaunchConfig {
-    /// Build a configuration from templates dir and ConfigFile.
-    /// If `template_override` is provided, it is used instead of reading from disk.
+    /// Backward-compatible helper that delegates to `Resolver`.
     pub fn from_template_and_config(
         templates_dir: &Path,
         config: ConfigFile,
         template_override: Option<Value>,
     ) -> Result<Self> {
-        let tmpl = match template_override {
-            Some(v) => TemplateFile::from_value(v)?,
-            None => {
-                let template_path = templates_dir.join(format!("{}.json", config.extends));
-                TemplateFile::from_path(&template_path)?
-            }
-        };
-        // Sanity check: templates must not provide args (enforced at parse time)
-        debug_assert!(
-            !tmpl.rest.contains_key("args"),
-            "Template rest must not contain 'args'"
-        );
-
-        // Build args: baseArgs (if any) + args (if any). Always present (can be empty)
-        let mut args: Vec<String> = Vec::new();
-        if let Some(base_path) = &config.base_args {
-            let base = BaseArgsFile::from_path(base_path)?;
-            args.extend(base.args);
-        }
-        if let Some(extra) = &config.args {
-            args.extend(extra.clone());
-        }
-
-        Ok(LaunchConfig {
-            type_field: tmpl.type_field,
-            request: tmpl.request,
-            name: config.name,
-            program: tmpl.program,
-            args,
-            stop_at_entry: tmpl.stop_at_entry,
-            rest: tmpl.rest.clone(),
-        })
+        let resolver = Resolver::new(templates_dir.to_path_buf());
+        resolver.resolve(config, template_override)
     }
 
-    /// Build a configuration from an already-parsed TemplateFile and ConfigFile.
-    fn from_template_and_config_with_template(
-        config: ConfigFile,
-        tmpl: TemplateFile,
-    ) -> Result<Self> {
-        let mut args: Vec<String> = Vec::new();
-        if let Some(base_path) = &config.base_args {
-            let base = BaseArgsFile::from_path(base_path)?;
-            args.extend(base.args);
-        }
-        if let Some(extra) = &config.args {
-            args.extend(extra.clone());
-        }
-
-        // Sanity check: templates must not provide args (enforced at parse time)
-        debug_assert!(
-            !tmpl.rest.contains_key("args"),
-            "Template rest must not contain 'args'"
-        );
-
-        Ok(LaunchConfig {
-            type_field: tmpl.type_field,
-            request: tmpl.request,
-            name: config.name,
-            program: tmpl.program,
-            args,
-            stop_at_entry: tmpl.stop_at_entry,
-            rest: tmpl.rest.clone(),
-        })
-    }
+    // Intentionally no direct variant that accepts `TemplateFile`; use `Resolver` instead.
 }
