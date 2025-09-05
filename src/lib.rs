@@ -152,7 +152,7 @@ mod tests {
     #[test]
     fn test_merge_config() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let generator = create_test_generator(&temp_dir);
+        let _generator = create_test_generator(&temp_dir);
 
         let template = json!({
             "type": "cppdbg",
@@ -169,7 +169,11 @@ mod tests {
             args: Some(vec!["--test".to_string()]),
         };
 
-        let merged = generator.merge_config(template, config)?;
+        // Local helper: resolve using Resolver with in-memory template
+        let resolver =
+            crate::generator::Resolver::new(temp_dir.path().join(".vscode-debug/templates"));
+        let ordered = resolver.resolve(config, Some(template))?;
+        let merged = serde_json::to_value(ordered)?;
 
         assert_eq!(merged["name"], "Test Config");
         assert_eq!(merged["type"], "cppdbg");

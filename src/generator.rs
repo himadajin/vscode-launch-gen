@@ -31,7 +31,7 @@ struct LaunchJson {
 }
 
 /// Resolves `ConfigFile` into `LaunchConfig` using templates directory context.
-pub struct Resolver {
+pub(crate) struct Resolver {
     templates_dir: PathBuf,
 }
 
@@ -54,15 +54,6 @@ impl Resolver {
                 TemplateFile::from_path(&template_path)?
             }
         };
-        self.build_from_template(config, tmpl)
-    }
-
-    /// Build a configuration from an already-parsed TemplateFile and ConfigFile.
-    pub(crate) fn resolve_with_template(
-        &self,
-        config: ConfigFile,
-        tmpl: TemplateFile,
-    ) -> Result<LaunchConfig> {
         self.build_from_template(config, tmpl)
     }
 
@@ -115,14 +106,6 @@ impl Generator {
             configs_dir,
             output_path,
         }
-    }
-
-    /// Merges template and config and returns a JSON value (for tests and intermediate checks)
-    pub fn merge_config(&self, template: Value, config: ConfigFile) -> Result<Value> {
-        let tmpl = TemplateFile::from_value(template)?;
-        let resolver = Resolver::new(self.templates_dir.clone());
-        let ordered = resolver.resolve_with_template(config, tmpl)?;
-        Ok(serde_json::to_value(ordered)?)
     }
 
     /// Collects all JSON config files from configs directory in alphabetical order
