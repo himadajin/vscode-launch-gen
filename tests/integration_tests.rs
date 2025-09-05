@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde_json::json;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use vscode_launch_gen::Generator;
 
@@ -115,6 +115,20 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+// Test helpers to reduce duplication across cases
+fn create_dirs(base_dir: &Path) -> Result<(PathBuf, PathBuf)> {
+    let templates_dir = base_dir.join(".vscode-debug/templates");
+    let configs_dir = base_dir.join(".vscode-debug/configs");
+    fs::create_dir_all(&templates_dir)?;
+    fs::create_dir_all(&configs_dir)?;
+    Ok((templates_dir, configs_dir))
+}
+
+fn write_json<P: AsRef<Path>>(path: P, value: &serde_json::Value) -> Result<()> {
+    fs::write(path, serde_json::to_string_pretty(value)?)?;
+    Ok(())
+}
+
 #[test]
 fn test_full_generation_process() -> Result<()> {
     let temp_dir = TempDir::new()?;
@@ -183,7 +197,6 @@ fn test_full_generation_process() -> Result<()> {
 #[test]
 fn test_error_missing_template() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
     let configs_dir = temp_dir.path().join(".vscode-debug/configs");
     fs::create_dir_all(&configs_dir)?;
 
@@ -194,10 +207,7 @@ fn test_error_missing_template() -> Result<()> {
         "enabled": true
     });
 
-    fs::write(
-        configs_dir.join("test.json"),
-        serde_json::to_string_pretty(&config)?,
-    )?;
+    write_json(configs_dir.join("test.json"), &config)?;
 
     let generator = Generator::new(
         temp_dir.path().join(".vscode-debug"),
@@ -218,18 +228,11 @@ fn test_error_missing_template() -> Result<()> {
 #[test]
 fn test_error_duplicate_names() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
-    let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
-    fs::create_dir_all(&templates_dir)?;
-    fs::create_dir_all(&configs_dir)?;
+    let (templates_dir, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template
     let template = json!({"type": "cppdbg"});
-    fs::write(
-        templates_dir.join("cpp.json"),
-        serde_json::to_string_pretty(&template)?,
-    )?;
+    write_json(templates_dir.join("cpp.json"), &template)?;
 
     // Create two configs with same name
     let config1 = json!({
@@ -244,15 +247,8 @@ fn test_error_duplicate_names() -> Result<()> {
         "enabled": true
     });
 
-    fs::write(
-        configs_dir.join("config1.json"),
-        serde_json::to_string_pretty(&config1)?,
-    )?;
-
-    fs::write(
-        configs_dir.join("config2.json"),
-        serde_json::to_string_pretty(&config2)?,
-    )?;
+    write_json(configs_dir.join("config1.json"), &config1)?;
+    write_json(configs_dir.join("config2.json"), &config2)?;
 
     let generator = Generator::new(
         temp_dir.path().join(".vscode-debug"),
@@ -274,9 +270,7 @@ fn test_error_duplicate_names() -> Result<()> {
 #[test]
 fn test_error_invalid_extends() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
-    fs::create_dir_all(&configs_dir)?;
+    let (_, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create config with invalid extends path
     let config = json!({
@@ -285,10 +279,7 @@ fn test_error_invalid_extends() -> Result<()> {
         "enabled": true
     });
 
-    fs::write(
-        configs_dir.join("invalid.json"),
-        serde_json::to_string_pretty(&config)?,
-    )?;
+    write_json(configs_dir.join("invalid.json"), &config)?;
 
     let config_path = configs_dir.join("invalid.json");
     let result = vscode_launch_gen::ConfigFile::from_path(&config_path);
@@ -307,18 +298,11 @@ fn test_error_invalid_extends() -> Result<()> {
 #[test]
 fn test_empty_configs_directory() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
-    let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
-    fs::create_dir_all(&templates_dir)?;
-    fs::create_dir_all(&configs_dir)?;
+    let (templates_dir, _configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template but no configs
     let template = json!({"type": "cppdbg"});
-    fs::write(
-        templates_dir.join("cpp.json"),
-        serde_json::to_string_pretty(&template)?,
-    )?;
+    write_json(templates_dir.join("cpp.json"), &template)?;
 
     let generator = Generator::new(
         temp_dir.path().join(".vscode-debug"),

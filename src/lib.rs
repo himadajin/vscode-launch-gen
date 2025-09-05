@@ -10,6 +10,7 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn create_test_generator(temp_dir: &TempDir) -> Generator {
@@ -37,10 +38,7 @@ mod tests {
             "MIMode": "gdb"
         });
 
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create config files (new schema with top-level args)
         let config1 = json!({
@@ -57,16 +55,14 @@ mod tests {
             "args": ["--input", "data.txt"]
         });
 
-        fs::write(
-            configs_dir.join("01-basic.json"),
-            serde_json::to_string_pretty(&config1)?,
-        )?;
+        write_json(configs_dir.join("01-basic.json"), &config1)?;
+        write_json(configs_dir.join("02-input.json"), &config2)?;
 
-        fs::write(
-            configs_dir.join("02-input.json"),
-            serde_json::to_string_pretty(&config2)?,
-        )?;
+        Ok(())
+    }
 
+    fn write_json<P: AsRef<Path>>(path: P, value: &serde_json::Value) -> anyhow::Result<()> {
+        fs::write(path, serde_json::to_string_pretty(value)?)?;
         Ok(())
     }
 
@@ -134,7 +130,7 @@ mod tests {
         });
 
         let config_path = configs_dir.join("invalid.json");
-        fs::write(&config_path, serde_json::to_string_pretty(&invalid_config)?)?;
+        write_json(&config_path, &invalid_config)?;
 
         let result = ConfigFile::from_path(&config_path);
 
@@ -316,10 +312,7 @@ mod tests {
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp"
         });
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create enabled config
         let enabled_config = json!({
@@ -328,10 +321,7 @@ mod tests {
             "enabled": true,
             "args": ["--enabled"]
         });
-        fs::write(
-            configs_dir.join("enabled.json"),
-            serde_json::to_string_pretty(&enabled_config)?,
-        )?;
+        write_json(configs_dir.join("enabled.json"), &enabled_config)?;
 
         // Create disabled config
         let disabled_config = json!({
@@ -340,10 +330,7 @@ mod tests {
             "enabled": false,
             "args": ["--disabled"]
         });
-        fs::write(
-            configs_dir.join("disabled.json"),
-            serde_json::to_string_pretty(&disabled_config)?,
-        )?;
+        write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
         generator.generate()?;
@@ -372,10 +359,7 @@ mod tests {
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp"
         });
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create only disabled config
         let disabled_config = json!({
@@ -384,10 +368,7 @@ mod tests {
             "enabled": false,
             "args": ["--disabled"]
         });
-        fs::write(
-            configs_dir.join("disabled.json"),
-            serde_json::to_string_pretty(&disabled_config)?,
-        )?;
+        write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
         let result = generator.generate();
@@ -418,10 +399,7 @@ mod tests {
             "program": "${workspaceFolder}/build/myapp",
             "args": ["--should-not-be-here"]
         });
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&bad_template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &bad_template)?;
 
         // Minimal config
         let config = json!({
@@ -429,10 +407,7 @@ mod tests {
             "extends": "cpp",
             "enabled": true
         });
-        fs::write(
-            configs_dir.join("bad.json"),
-            serde_json::to_string_pretty(&config)?,
-        )?;
+        write_json(configs_dir.join("bad.json"), &config)?;
 
         let generator = create_test_generator(&temp_dir);
         let result = generator.generate();
