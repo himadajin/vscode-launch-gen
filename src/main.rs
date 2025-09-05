@@ -29,7 +29,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     let output_path = cli.output.clone();
-    let generator = Generator::new(cli.dir, output_path.clone());
+    let generator = Generator::new(cli.dir);
 
     let launch = generator.generate()?;
 

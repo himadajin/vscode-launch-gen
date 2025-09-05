@@ -15,8 +15,7 @@ mod tests {
 
     fn create_test_generator(temp_dir: &TempDir) -> Generator {
         let config_dir = temp_dir.path().join(".vscode-debug");
-        let output_path = temp_dir.path().join(".vscode/launch.json");
-        Generator::new(config_dir, output_path)
+        Generator::new(config_dir)
     }
 
     fn setup_test_files(temp_dir: &TempDir) -> anyhow::Result<()> {

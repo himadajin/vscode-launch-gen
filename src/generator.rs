@@ -113,7 +113,7 @@ pub struct Generator {
 
 impl Generator {
     /// Creates a new generator instance with directory paths
-    pub fn new(config_dir: PathBuf, _output_path: PathBuf) -> Self {
+    pub fn new(config_dir: PathBuf) -> Self {
         let templates_dir = config_dir.join("templates");
         let configs_dir = config_dir.join("configs");
 
