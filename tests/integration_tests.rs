@@ -3,7 +3,7 @@ use serde_json::json;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
-use vscode_launch_gen::{Generator, LaunchJson};
+use vscode_launch_gen::Generator;
 
 fn create_test_files(base_dir: &Path) -> Result<()> {
     let templates_dir = base_dir.join(".vscode-debug/templates");
@@ -131,14 +131,13 @@ fn test_full_generation_process() -> Result<()> {
     assert!(output_path.exists());
 
     let content = fs::read_to_string(output_path)?;
-    let launch_json: LaunchJson = serde_json::from_str(&content)?;
-
-    assert_eq!(launch_json.version, "0.2.0");
-    assert_eq!(launch_json.configurations.len(), 4);
+    let v: serde_json::Value = serde_json::from_str(&content)?;
+    assert_eq!(v["version"], "0.2.0");
+    let configurations = v["configurations"].as_array().unwrap();
+    assert_eq!(configurations.len(), 4);
 
     // Check configurations are in alphabetical order by filename
-    let names: Vec<&str> = launch_json
-        .configurations
+    let names: Vec<&str> = configurations
         .iter()
         .map(|c| c["name"].as_str().unwrap())
         .collect();
@@ -150,13 +149,13 @@ fn test_full_generation_process() -> Result<()> {
     );
 
     // Check first configuration (Debug Basic - from 01-debug-basic.json)
-    let basic_config = &launch_json.configurations[0];
+    let basic_config = &configurations[0];
     assert_eq!(basic_config["name"], "Debug Basic");
     assert_eq!(basic_config["args"], json!([]));
     assert_eq!(basic_config["cwd"], "${workspaceFolder}"); // From template
 
     // Check second configuration (Debug with Input) combines baseArgs + args
-    let input_config = &launch_json.configurations[1];
+    let input_config = &configurations[1];
     assert_eq!(input_config["name"], "Debug with Input");
     assert_eq!(
         input_config["args"],
@@ -164,7 +163,7 @@ fn test_full_generation_process() -> Result<()> {
     );
 
     // Check third configuration (Benchmark - from 03-benchmark.json)
-    let benchmark_config = &launch_json.configurations[2];
+    let benchmark_config = &configurations[2];
     assert_eq!(benchmark_config["name"], "Benchmark");
     assert_eq!(benchmark_config["type"], "cppdbg");
     assert_eq!(
@@ -173,7 +172,7 @@ fn test_full_generation_process() -> Result<()> {
     );
 
     // Check fourth configuration (LLDB Debug - from 04-lldb-debug.json)
-    let lldb_config = &launch_json.configurations[3];
+    let lldb_config = &configurations[3];
     assert_eq!(lldb_config["name"], "LLDB Debug");
     assert_eq!(lldb_config["type"], "lldb"); // Different template
     assert!(lldb_config.get("MIMode").is_none()); // LLDB template doesn't have MIMode
@@ -291,13 +290,8 @@ fn test_error_invalid_extends() -> Result<()> {
         serde_json::to_string_pretty(&config)?,
     )?;
 
-    let generator = Generator::new(
-        temp_dir.path().join(".vscode-debug"),
-        temp_dir.path().join(".vscode/launch.json"),
-    );
-
     let config_path = configs_dir.join("invalid.json");
-    let result = generator.load_config(&config_path);
+    let result = vscode_launch_gen::ConfigFile::from_path(&config_path);
 
     assert!(result.is_err());
     assert!(
