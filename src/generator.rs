@@ -17,6 +17,8 @@ pub struct LaunchConfig {
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     program: Option<String>,
+    #[serde(rename = "stopAtEntry", skip_serializing_if = "Option::is_none")]
+    stop_at_entry: Option<bool>,
     #[serde(flatten)]
     rest: Map<String, Value>,
 }
@@ -231,6 +233,7 @@ impl LaunchConfig {
             request: tmpl.request,
             name: config.name,
             program: tmpl.program,
+            stop_at_entry: tmpl.stop_at_entry,
             rest,
         })
     }
@@ -258,6 +261,7 @@ impl LaunchConfig {
             request: tmpl.request,
             name: config.name,
             program: tmpl.program,
+            stop_at_entry: tmpl.stop_at_entry,
             rest,
         })
     }

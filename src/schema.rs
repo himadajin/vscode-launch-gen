@@ -63,6 +63,7 @@ pub(crate) struct TemplateFile {
     pub type_field: String,
     pub request: Option<String>,
     pub program: Option<String>,
+    pub stop_at_entry: Option<bool>,
     pub rest: Map<String, Value>,
 }
 
@@ -103,9 +104,13 @@ impl TemplateFile {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let stop_at_entry = template_obj
+            .get("stopAtEntry")
+            .and_then(|v| v.as_bool());
+
         let mut rest: Map<String, Value> = Map::with_capacity(template_obj.len());
         for (k, v) in template_obj.iter() {
-            if k == "type" || k == "request" || k == "program" {
+            if k == "type" || k == "request" || k == "program" || k == "stopAtEntry" {
                 continue;
             }
             rest.insert(k.clone(), v.clone());
@@ -115,6 +120,7 @@ impl TemplateFile {
             type_field,
             request,
             program,
+            stop_at_entry,
             rest,
         })
     }
