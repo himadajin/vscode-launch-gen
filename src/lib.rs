@@ -1,13 +1,16 @@
 pub mod generator;
+mod schema;
 
 // Re-export public APIs
-pub use generator::{ConfigFile, Generator, LaunchJson};
+pub use generator::{Generator, LaunchConfig};
+pub use schema::ConfigFile;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
     use std::fs;
+    use std::path::Path;
     use tempfile::TempDir;
 
     fn create_test_generator(temp_dir: &TempDir) -> Generator {
@@ -35,10 +38,7 @@ mod tests {
             "MIMode": "gdb"
         });
 
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create config files (new schema with top-level args)
         let config1 = json!({
@@ -55,16 +55,14 @@ mod tests {
             "args": ["--input", "data.txt"]
         });
 
-        fs::write(
-            configs_dir.join("01-basic.json"),
-            serde_json::to_string_pretty(&config1)?,
-        )?;
+        write_json(configs_dir.join("01-basic.json"), &config1)?;
+        write_json(configs_dir.join("02-input.json"), &config2)?;
 
-        fs::write(
-            configs_dir.join("02-input.json"),
-            serde_json::to_string_pretty(&config2)?,
-        )?;
+        Ok(())
+    }
 
+    fn write_json<P: AsRef<Path>>(path: P, value: &serde_json::Value) -> anyhow::Result<()> {
+        fs::write(path, serde_json::to_string_pretty(value)?)?;
         Ok(())
     }
 
@@ -72,11 +70,18 @@ mod tests {
     fn test_load_template() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let generator = create_test_generator(&temp_dir);
-
-        let template = generator.load_template("cpp")?;
-        assert_eq!(template["type"], "cppdbg");
-        assert_eq!(template["MIMode"], "gdb");
+        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let config = ConfigFile {
+            name: "Dummy".to_string(),
+            extends: "cpp".to_string(),
+            enabled: true,
+            base_args: None,
+            args: None,
+        };
+        let doc = LaunchConfig::from_template_and_config(&templates_dir, config, None)?;
+        let v = serde_json::to_value(doc)?;
+        assert_eq!(v["type"], "cppdbg");
+        assert_eq!(v["MIMode"], "gdb");
 
         Ok(())
     }
@@ -85,9 +90,15 @@ mod tests {
     fn test_load_template_not_found() {
         let temp_dir = TempDir::new().unwrap();
         setup_test_files(&temp_dir).unwrap();
-        let generator = create_test_generator(&temp_dir);
-
-        let result = generator.load_template("nonexistent");
+        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let config = ConfigFile {
+            name: "Dummy".to_string(),
+            extends: "nonexistent".to_string(),
+            enabled: true,
+            base_args: None,
+            args: None,
+        };
+        let result = LaunchConfig::from_template_and_config(&templates_dir, config, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -96,10 +107,8 @@ mod tests {
     fn test_load_config() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let generator = create_test_generator(&temp_dir);
-
         let config_path = temp_dir.path().join(".vscode-debug/configs/01-basic.json");
-        let config = generator.load_config(&config_path)?;
+        let config = ConfigFile::from_path(&config_path)?;
 
         assert_eq!(config.extends, "cpp");
         assert_eq!(config.name, "Basic Test");
@@ -121,10 +130,9 @@ mod tests {
         });
 
         let config_path = configs_dir.join("invalid.json");
-        fs::write(&config_path, serde_json::to_string_pretty(&invalid_config)?)?;
+        write_json(&config_path, &invalid_config)?;
 
-        let generator = create_test_generator(&temp_dir);
-        let result = generator.load_config(&config_path);
+        let result = ConfigFile::from_path(&config_path);
 
         assert!(result.is_err());
         assert!(
@@ -140,7 +148,6 @@ mod tests {
     #[test]
     fn test_merge_config() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let generator = create_test_generator(&temp_dir);
 
         let template = json!({
             "type": "cppdbg",
@@ -157,7 +164,11 @@ mod tests {
             args: Some(vec!["--test".to_string()]),
         };
 
-        let merged = generator.merge_config(template, config)?;
+        // Local helper: resolve using Resolver with in-memory template
+        let resolver =
+            crate::generator::Resolver::new(temp_dir.path().join(".vscode-debug/templates"));
+        let ordered = resolver.resolve(config, Some(template))?;
+        let merged = serde_json::to_value(ordered)?;
 
         assert_eq!(merged["name"], "Test Config");
         assert_eq!(merged["type"], "cppdbg");
@@ -168,9 +179,6 @@ mod tests {
 
     #[test]
     fn test_validate_unique_names() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let generator = create_test_generator(&temp_dir);
-
         let config1 = ConfigFile {
             name: "Test".to_string(),
             extends: "cpp".to_string(),
@@ -192,7 +200,7 @@ mod tests {
             (std::path::PathBuf::from("config2.json"), config2),
         ];
 
-        let result = generator.validate_unique_names(&configs);
+        let result = crate::generator::validate_unique_names(&configs);
         assert!(result.is_err());
         assert!(
             result
@@ -232,21 +240,56 @@ mod tests {
         assert!(output_path.exists());
 
         let content = fs::read_to_string(output_path)?;
-        let launch_json: LaunchJson = serde_json::from_str(&content)?;
+        let v: serde_json::Value = serde_json::from_str(&content)?;
 
-        assert_eq!(launch_json.version, "0.2.0");
-        assert_eq!(launch_json.configurations.len(), 2);
+        assert_eq!(v["version"], "0.2.0");
+        let configs = v["configurations"].as_array().unwrap();
+        assert_eq!(configs.len(), 2);
 
         // Check first configuration
-        let config1 = &launch_json.configurations[0];
+        let config1 = &configs[0];
         assert_eq!(config1["name"], "Basic Test");
         assert_eq!(config1["type"], "cppdbg");
         assert_eq!(config1["args"], json!(["--test"]));
 
         // Check second configuration
-        let config2 = &launch_json.configurations[1];
+        let config2 = &configs[1];
         assert_eq!(config2["name"], "Test with Input");
         assert_eq!(config2["args"], json!(["--input", "data.txt"]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_configuration_key_ordering() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
+        setup_test_files(&temp_dir)?;
+        let generator = create_test_generator(&temp_dir);
+
+        generator.generate()?;
+
+        let output_path = temp_dir.path().join(".vscode/launch.json");
+        let content = fs::read_to_string(output_path)?;
+
+        // Find positions of the keys within the first configuration block
+        // This is a pragmatic check to ensure ordering in serialized output
+        let idx_type = content.find("\"type\"").unwrap();
+        let idx_request = content.find("\"request\"").unwrap();
+        let idx_name = content.find("\"name\"").unwrap();
+        let idx_program = content.find("\"program\"").unwrap();
+
+        assert!(
+            idx_type < idx_request,
+            "'type' should come before 'request'"
+        );
+        assert!(
+            idx_request < idx_name,
+            "'request' should come before 'name'"
+        );
+        assert!(
+            idx_name < idx_program,
+            "'name' should come before 'program'"
+        );
 
         Ok(())
     }
@@ -265,10 +308,7 @@ mod tests {
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp"
         });
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create enabled config
         let enabled_config = json!({
@@ -277,10 +317,7 @@ mod tests {
             "enabled": true,
             "args": ["--enabled"]
         });
-        fs::write(
-            configs_dir.join("enabled.json"),
-            serde_json::to_string_pretty(&enabled_config)?,
-        )?;
+        write_json(configs_dir.join("enabled.json"), &enabled_config)?;
 
         // Create disabled config
         let disabled_config = json!({
@@ -289,21 +326,17 @@ mod tests {
             "enabled": false,
             "args": ["--disabled"]
         });
-        fs::write(
-            configs_dir.join("disabled.json"),
-            serde_json::to_string_pretty(&disabled_config)?,
-        )?;
+        write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
         generator.generate()?;
 
         let output_path = temp_dir.path().join(".vscode/launch.json");
         let content = fs::read_to_string(output_path)?;
-        let launch_json: LaunchJson = serde_json::from_str(&content)?;
-
-        // Only enabled config should be included
-        assert_eq!(launch_json.configurations.len(), 1);
-        assert_eq!(launch_json.configurations[0]["name"], "Enabled Config");
+        let v: serde_json::Value = serde_json::from_str(&content)?;
+        let configs = v["configurations"].as_array().unwrap();
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0]["name"], "Enabled Config");
 
         Ok(())
     }
@@ -322,10 +355,7 @@ mod tests {
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp"
         });
-        fs::write(
-            templates_dir.join("cpp.json"),
-            serde_json::to_string_pretty(&template)?,
-        )?;
+        write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create only disabled config
         let disabled_config = json!({
@@ -334,10 +364,7 @@ mod tests {
             "enabled": false,
             "args": ["--disabled"]
         });
-        fs::write(
-            configs_dir.join("disabled.json"),
-            serde_json::to_string_pretty(&disabled_config)?,
-        )?;
+        write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
         let result = generator.generate();
@@ -349,6 +376,40 @@ mod tests {
                 .to_string()
                 .contains("No enabled configuration files found")
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_template_with_args_is_error() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+
+        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&configs_dir)?;
+
+        // Template that wrongly includes args
+        let bad_template = json!({
+            "type": "cppdbg",
+            "program": "${workspaceFolder}/build/myapp",
+            "args": ["--should-not-be-here"]
+        });
+        write_json(templates_dir.join("cpp.json"), &bad_template)?;
+
+        // Minimal config
+        let config = json!({
+            "name": "Bad",
+            "extends": "cpp",
+            "enabled": true
+        });
+        write_json(configs_dir.join("bad.json"), &config)?;
+
+        let generator = create_test_generator(&temp_dir);
+        let result = generator.generate();
+
+        assert!(result.is_err());
+        assert!(result.is_err());
 
         Ok(())
     }

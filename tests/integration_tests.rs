@@ -1,9 +1,9 @@
 use anyhow::Result;
 use serde_json::json;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-use vscode_launch_gen::{Generator, LaunchJson};
+use vscode_launch_gen::Generator;
 
 fn create_test_files(base_dir: &Path) -> Result<()> {
     let templates_dir = base_dir.join(".vscode-debug/templates");
@@ -115,6 +115,20 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+// Test helpers to reduce duplication across cases
+fn create_dirs(base_dir: &Path) -> Result<(PathBuf, PathBuf)> {
+    let templates_dir = base_dir.join(".vscode-debug/templates");
+    let configs_dir = base_dir.join(".vscode-debug/configs");
+    fs::create_dir_all(&templates_dir)?;
+    fs::create_dir_all(&configs_dir)?;
+    Ok((templates_dir, configs_dir))
+}
+
+fn write_json<P: AsRef<Path>>(path: P, value: &serde_json::Value) -> Result<()> {
+    fs::write(path, serde_json::to_string_pretty(value)?)?;
+    Ok(())
+}
+
 #[test]
 fn test_full_generation_process() -> Result<()> {
     let temp_dir = TempDir::new()?;
@@ -131,14 +145,13 @@ fn test_full_generation_process() -> Result<()> {
     assert!(output_path.exists());
 
     let content = fs::read_to_string(output_path)?;
-    let launch_json: LaunchJson = serde_json::from_str(&content)?;
-
-    assert_eq!(launch_json.version, "0.2.0");
-    assert_eq!(launch_json.configurations.len(), 4);
+    let v: serde_json::Value = serde_json::from_str(&content)?;
+    assert_eq!(v["version"], "0.2.0");
+    let configurations = v["configurations"].as_array().unwrap();
+    assert_eq!(configurations.len(), 4);
 
     // Check configurations are in alphabetical order by filename
-    let names: Vec<&str> = launch_json
-        .configurations
+    let names: Vec<&str> = configurations
         .iter()
         .map(|c| c["name"].as_str().unwrap())
         .collect();
@@ -150,13 +163,13 @@ fn test_full_generation_process() -> Result<()> {
     );
 
     // Check first configuration (Debug Basic - from 01-debug-basic.json)
-    let basic_config = &launch_json.configurations[0];
+    let basic_config = &configurations[0];
     assert_eq!(basic_config["name"], "Debug Basic");
     assert_eq!(basic_config["args"], json!([]));
     assert_eq!(basic_config["cwd"], "${workspaceFolder}"); // From template
 
     // Check second configuration (Debug with Input) combines baseArgs + args
-    let input_config = &launch_json.configurations[1];
+    let input_config = &configurations[1];
     assert_eq!(input_config["name"], "Debug with Input");
     assert_eq!(
         input_config["args"],
@@ -164,7 +177,7 @@ fn test_full_generation_process() -> Result<()> {
     );
 
     // Check third configuration (Benchmark - from 03-benchmark.json)
-    let benchmark_config = &launch_json.configurations[2];
+    let benchmark_config = &configurations[2];
     assert_eq!(benchmark_config["name"], "Benchmark");
     assert_eq!(benchmark_config["type"], "cppdbg");
     assert_eq!(
@@ -173,7 +186,7 @@ fn test_full_generation_process() -> Result<()> {
     );
 
     // Check fourth configuration (LLDB Debug - from 04-lldb-debug.json)
-    let lldb_config = &launch_json.configurations[3];
+    let lldb_config = &configurations[3];
     assert_eq!(lldb_config["name"], "LLDB Debug");
     assert_eq!(lldb_config["type"], "lldb"); // Different template
     assert!(lldb_config.get("MIMode").is_none()); // LLDB template doesn't have MIMode
@@ -184,7 +197,6 @@ fn test_full_generation_process() -> Result<()> {
 #[test]
 fn test_error_missing_template() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
     let configs_dir = temp_dir.path().join(".vscode-debug/configs");
     fs::create_dir_all(&configs_dir)?;
 
@@ -195,10 +207,7 @@ fn test_error_missing_template() -> Result<()> {
         "enabled": true
     });
 
-    fs::write(
-        configs_dir.join("test.json"),
-        serde_json::to_string_pretty(&config)?,
-    )?;
+    write_json(configs_dir.join("test.json"), &config)?;
 
     let generator = Generator::new(
         temp_dir.path().join(".vscode-debug"),
@@ -219,18 +228,11 @@ fn test_error_missing_template() -> Result<()> {
 #[test]
 fn test_error_duplicate_names() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
-    let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
-    fs::create_dir_all(&templates_dir)?;
-    fs::create_dir_all(&configs_dir)?;
+    let (templates_dir, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template
     let template = json!({"type": "cppdbg"});
-    fs::write(
-        templates_dir.join("cpp.json"),
-        serde_json::to_string_pretty(&template)?,
-    )?;
+    write_json(templates_dir.join("cpp.json"), &template)?;
 
     // Create two configs with same name
     let config1 = json!({
@@ -245,15 +247,8 @@ fn test_error_duplicate_names() -> Result<()> {
         "enabled": true
     });
 
-    fs::write(
-        configs_dir.join("config1.json"),
-        serde_json::to_string_pretty(&config1)?,
-    )?;
-
-    fs::write(
-        configs_dir.join("config2.json"),
-        serde_json::to_string_pretty(&config2)?,
-    )?;
+    write_json(configs_dir.join("config1.json"), &config1)?;
+    write_json(configs_dir.join("config2.json"), &config2)?;
 
     let generator = Generator::new(
         temp_dir.path().join(".vscode-debug"),
@@ -275,9 +270,7 @@ fn test_error_duplicate_names() -> Result<()> {
 #[test]
 fn test_error_invalid_extends() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
-    fs::create_dir_all(&configs_dir)?;
+    let (_, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create config with invalid extends path
     let config = json!({
@@ -286,18 +279,10 @@ fn test_error_invalid_extends() -> Result<()> {
         "enabled": true
     });
 
-    fs::write(
-        configs_dir.join("invalid.json"),
-        serde_json::to_string_pretty(&config)?,
-    )?;
-
-    let generator = Generator::new(
-        temp_dir.path().join(".vscode-debug"),
-        temp_dir.path().join(".vscode/launch.json"),
-    );
+    write_json(configs_dir.join("invalid.json"), &config)?;
 
     let config_path = configs_dir.join("invalid.json");
-    let result = generator.load_config(&config_path);
+    let result = vscode_launch_gen::ConfigFile::from_path(&config_path);
 
     assert!(result.is_err());
     assert!(
@@ -313,18 +298,11 @@ fn test_error_invalid_extends() -> Result<()> {
 #[test]
 fn test_empty_configs_directory() -> Result<()> {
     let temp_dir = TempDir::new()?;
-
-    let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
-    fs::create_dir_all(&templates_dir)?;
-    fs::create_dir_all(&configs_dir)?;
+    let (templates_dir, _configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template but no configs
     let template = json!({"type": "cppdbg"});
-    fs::write(
-        templates_dir.join("cpp.json"),
-        serde_json::to_string_pretty(&template)?,
-    )?;
+    write_json(templates_dir.join("cpp.json"), &template)?;
 
     let generator = Generator::new(
         temp_dir.path().join(".vscode-debug"),

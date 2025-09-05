@@ -1,33 +1,101 @@
+use crate::schema::{BaseArgsFile, ConfigFile, TemplateFile};
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Serialize;
+use serde_json::{Map, Value};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Individual configuration file structure with template reference and overrides
-#[derive(Debug, Deserialize)]
-pub struct ConfigFile {
-    /// Unique configuration name displayed in VSCode
-    pub name: String,
-    /// Template name to extend (without .json extension)
-    pub extends: String,
-    /// Whether this configuration is enabled
-    pub enabled: bool,
-    /// Optional path to a JSON file containing base args, e.g., { "args": ["..."] }
-    #[serde(rename = "baseArgs")]
-    pub base_args: Option<PathBuf>,
-    /// Additional args to append after base args
-    pub args: Option<Vec<String>>,
+/// Launch configuration (template + overrides) serialized with ordered keys.
+/// Order: type, request, name, program, then other keys.
+#[derive(Debug, Serialize)]
+pub struct LaunchConfig {
+    #[serde(rename = "type")]
+    type_field: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request: Option<String>,
+    name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    program: Option<String>,
+    args: Vec<String>,
+    #[serde(rename = "stopAtEntry", skip_serializing_if = "Option::is_none")]
+    stop_at_entry: Option<bool>,
+    #[serde(flatten)]
+    rest: Map<String, Value>,
 }
 
-/// VSCode launch.json file structure
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LaunchJson {
-    /// VSCode launch configuration version
-    pub version: String,
-    /// Array of debug configurations
-    pub configurations: Vec<Value>,
+impl LaunchConfig {
+    /// Backward-compatible helper that delegates to `Resolver`.
+    pub fn from_template_and_config(
+        templates_dir: &Path,
+        config: ConfigFile,
+        template_override: Option<Value>,
+    ) -> Result<Self> {
+        let resolver = Resolver::new(templates_dir.to_path_buf());
+        resolver.resolve(config, template_override)
+    }
+}
+
+/// Resolves `ConfigFile` into `LaunchConfig` using templates directory context.
+pub(crate) struct Resolver {
+    templates_dir: PathBuf,
+}
+
+impl Resolver {
+    pub fn new(templates_dir: PathBuf) -> Self {
+        Self { templates_dir }
+    }
+
+    /// Build a configuration from templates dir and ConfigFile.
+    /// If `template_override` is provided, it is used instead of reading from disk.
+    pub fn resolve(
+        &self,
+        config: ConfigFile,
+        template_override: Option<Value>,
+    ) -> Result<LaunchConfig> {
+        let tmpl = match template_override {
+            Some(v) => TemplateFile::from_value(v)?,
+            None => {
+                let template_path = self.templates_dir.join(format!("{}.json", config.extends));
+                TemplateFile::from_path(&template_path)?
+            }
+        };
+        self.build_from_template(config, tmpl)
+    }
+
+    fn build_from_template(&self, config: ConfigFile, tmpl: TemplateFile) -> Result<LaunchConfig> {
+        // Build args: baseArgs (if any) + args (if any). Always present (can be empty)
+        let mut args: Vec<String> = Vec::new();
+        if let Some(base_path) = &config.base_args {
+            let base = BaseArgsFile::from_path(base_path)?;
+            args.extend(base.args);
+        }
+        if let Some(extra) = &config.args {
+            args.extend(extra.clone());
+        }
+
+        // Sanity check: templates must not provide args (enforced at parse time)
+        debug_assert!(
+            !tmpl.rest.contains_key("args"),
+            "Template rest must not contain 'args'"
+        );
+
+        Ok(LaunchConfig {
+            type_field: tmpl.type_field,
+            request: tmpl.request,
+            name: config.name,
+            program: tmpl.program,
+            args,
+            stop_at_entry: tmpl.stop_at_entry,
+            rest: tmpl.rest.clone(),
+        })
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct LaunchJson {
+    version: String,
+    configurations: Vec<LaunchConfig>,
 }
 
 /// Main generator for creating VSCode launch.json from templates and configs
@@ -50,97 +118,6 @@ impl Generator {
             configs_dir,
             output_path,
         }
-    }
-
-    /// Loads a template file by name from the templates directory
-    pub fn load_template(&self, template_name: &str) -> Result<Value> {
-        let template_path = self.templates_dir.join(format!("{}.json", template_name));
-
-        if !template_path.exists() {
-            anyhow::bail!(
-                "Base template '{}' not found (expected: {})",
-                template_name,
-                template_path.display()
-            );
-        }
-
-        let content = fs::read_to_string(&template_path).with_context(|| {
-            format!("Failed to read template file: {}", template_path.display())
-        })?;
-
-        serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse template JSON: {}", template_path.display()))
-    }
-
-    /// Loads and validates a configuration file
-    pub fn load_config(&self, config_path: &Path) -> Result<ConfigFile> {
-        let content = fs::read_to_string(config_path)
-            .with_context(|| format!("Failed to read config file: {}", config_path.display()))?;
-
-        let config: ConfigFile = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse config JSON: {}", config_path.display()))?;
-
-        if config.extends.contains('/') || config.extends.contains('\\') {
-            anyhow::bail!(
-                "Invalid extends value '{}' in {}\nOnly template names are allowed (e.g., 'cpp', 'lldb')",
-                config.extends,
-                config_path.display()
-            );
-        }
-
-        Ok(config)
-    }
-
-    /// Load base args from a JSON file that contains { "args": [ ... ] }
-    fn load_base_args(&self, path: &Path) -> Result<Vec<String>> {
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read baseArgs file: {}", path.display()))?;
-        let v: Value = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse baseArgs JSON: {}", path.display()))?;
-        let args = v.get("args").and_then(|a| a.as_array()).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Invalid baseArgs format in {}: missing 'args' array",
-                path.display()
-            )
-        })?;
-        let mut out = Vec::with_capacity(args.len());
-        for item in args {
-            match item.as_str() {
-                Some(s) => out.push(s.to_string()),
-                None => anyhow::bail!(
-                    "Invalid baseArgs format in {}: 'args' must be an array of strings",
-                    path.display()
-                ),
-            }
-        }
-        Ok(out)
-    }
-
-    /// Merges template and config, with config values overriding template values
-    pub fn merge_config(&self, template: Value, config: ConfigFile) -> Result<Value> {
-        let mut merged = if let Value::Object(template_obj) = template {
-            template_obj
-        } else {
-            anyhow::bail!("Template must be a JSON object");
-        };
-
-        // Insert the name field from the top-level config
-        merged.insert("name".to_string(), Value::String(config.name));
-
-        // Build args: baseArgs (if any) + args (if any)
-        let mut final_args: Vec<String> = Vec::new();
-        if let Some(base_path) = &config.base_args {
-            let base = self.load_base_args(base_path)?;
-            final_args.extend(base);
-        }
-        if let Some(extra) = &config.args {
-            final_args.extend(extra.clone());
-        }
-        if config.args.is_some() || config.base_args.is_some() {
-            merged.insert("args".to_string(), serde_json::json!(final_args));
-        }
-
-        Ok(Value::Object(merged))
     }
 
     /// Collects all JSON config files from configs directory in alphabetical order
@@ -170,32 +147,6 @@ impl Generator {
 
         config_files.sort();
         Ok(config_files)
-    }
-
-    /// Validates that all configuration names are unique across files
-    pub fn validate_unique_names(&self, configs: &[(PathBuf, ConfigFile)]) -> Result<()> {
-        let mut name_to_files: BTreeMap<&str, Vec<&Path>> = BTreeMap::new();
-
-        for (path, config) in configs {
-            name_to_files.entry(&config.name).or_default().push(path);
-        }
-
-        for (name, files) in name_to_files {
-            if files.len() > 1 {
-                let file_list: Vec<String> = files
-                    .iter()
-                    .map(|p| format!("  - {}", p.display()))
-                    .collect();
-
-                anyhow::bail!(
-                    "Duplicate configuration name '{}' found in:\n{}\nEach configuration must have a unique name.",
-                    name,
-                    file_list.join("\n")
-                );
-            }
-        }
-
-        Ok(())
     }
 
     /// Ensures the output directory exists, creating it if necessary
@@ -235,7 +186,7 @@ impl Generator {
 
         let mut configs = Vec::new();
         for config_path in config_files {
-            let config = self.load_config(&config_path)?;
+            let config = ConfigFile::from_path(&config_path)?;
             configs.push((config_path, config));
         }
 
@@ -252,16 +203,15 @@ impl Generator {
             );
         }
 
-        self.validate_unique_names(&enabled_configs)?;
+        validate_unique_names(&enabled_configs)?;
 
-        let mut configurations = Vec::new();
+        let mut configurations: Vec<LaunchConfig> = Vec::new();
+        let resolver = Resolver::new(self.templates_dir.clone());
 
         for (config_path, config) in enabled_configs {
-            let template = self
-                .load_template(&config.extends)
+            let merged = resolver
+                .resolve(config, None)
                 .with_context(|| format!("Error processing config: {}", config_path.display()))?;
-
-            let merged = self.merge_config(template, config)?;
             configurations.push(merged);
         }
 
@@ -284,4 +234,30 @@ impl Generator {
 
         Ok(())
     }
+}
+
+/// Validates that all configuration names are unique across files
+pub(crate) fn validate_unique_names(configs: &[(PathBuf, ConfigFile)]) -> Result<()> {
+    let mut name_to_files: BTreeMap<&str, Vec<&Path>> = BTreeMap::new();
+
+    for (path, config) in configs {
+        name_to_files.entry(&config.name).or_default().push(path);
+    }
+
+    for (name, files) in name_to_files {
+        if files.len() > 1 {
+            let file_list: Vec<String> = files
+                .iter()
+                .map(|p| format!("  - {}", p.display()))
+                .collect();
+
+            anyhow::bail!(
+                "Duplicate configuration name '{}' found in:\n{}\nEach configuration must have a unique name.",
+                name,
+                file_list.join("\n")
+            );
+        }
+    }
+
+    Ok(())
 }
