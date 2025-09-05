@@ -24,10 +24,16 @@ pub struct LaunchConfig {
     rest: Map<String, Value>,
 }
 
-#[derive(Debug, Serialize)]
-struct LaunchJson {
-    version: String,
-    configurations: Vec<LaunchConfig>,
+impl LaunchConfig {
+    /// Backward-compatible helper that delegates to `Resolver`.
+    pub fn from_template_and_config(
+        templates_dir: &Path,
+        config: ConfigFile,
+        template_override: Option<Value>,
+    ) -> Result<Self> {
+        let resolver = Resolver::new(templates_dir.to_path_buf());
+        resolver.resolve(config, template_override)
+    }
 }
 
 /// Resolves `ConfigFile` into `LaunchConfig` using templates directory context.
@@ -86,6 +92,12 @@ impl Resolver {
     }
 }
 
+#[derive(Debug, Serialize)]
+struct LaunchJson {
+    version: String,
+    configurations: Vec<LaunchConfig>,
+}
+
 /// Main generator for creating VSCode launch.json from templates and configs
 pub struct Generator {
     config_dir: PathBuf,
@@ -135,32 +147,6 @@ impl Generator {
 
         config_files.sort();
         Ok(config_files)
-    }
-
-    /// Validates that all configuration names are unique across files
-    pub fn validate_unique_names(&self, configs: &[(PathBuf, ConfigFile)]) -> Result<()> {
-        let mut name_to_files: BTreeMap<&str, Vec<&Path>> = BTreeMap::new();
-
-        for (path, config) in configs {
-            name_to_files.entry(&config.name).or_default().push(path);
-        }
-
-        for (name, files) in name_to_files {
-            if files.len() > 1 {
-                let file_list: Vec<String> = files
-                    .iter()
-                    .map(|p| format!("  - {}", p.display()))
-                    .collect();
-
-                anyhow::bail!(
-                    "Duplicate configuration name '{}' found in:\n{}\nEach configuration must have a unique name.",
-                    name,
-                    file_list.join("\n")
-                );
-            }
-        }
-
-        Ok(())
     }
 
     /// Ensures the output directory exists, creating it if necessary
@@ -217,7 +203,7 @@ impl Generator {
             );
         }
 
-        self.validate_unique_names(&enabled_configs)?;
+        validate_unique_names(&enabled_configs)?;
 
         let mut configurations: Vec<LaunchConfig> = Vec::new();
         let resolver = Resolver::new(self.templates_dir.clone());
@@ -250,16 +236,28 @@ impl Generator {
     }
 }
 
-impl LaunchConfig {
-    /// Backward-compatible helper that delegates to `Resolver`.
-    pub fn from_template_and_config(
-        templates_dir: &Path,
-        config: ConfigFile,
-        template_override: Option<Value>,
-    ) -> Result<Self> {
-        let resolver = Resolver::new(templates_dir.to_path_buf());
-        resolver.resolve(config, template_override)
+/// Validates that all configuration names are unique across files
+pub(crate) fn validate_unique_names(configs: &[(PathBuf, ConfigFile)]) -> Result<()> {
+    let mut name_to_files: BTreeMap<&str, Vec<&Path>> = BTreeMap::new();
+
+    for (path, config) in configs {
+        name_to_files.entry(&config.name).or_default().push(path);
     }
 
-    // Intentionally no direct variant that accepts `TemplateFile`; use `Resolver` instead.
+    for (name, files) in name_to_files {
+        if files.len() > 1 {
+            let file_list: Vec<String> = files
+                .iter()
+                .map(|p| format!("  - {}", p.display()))
+                .collect();
+
+            anyhow::bail!(
+                "Duplicate configuration name '{}' found in:\n{}\nEach configuration must have a unique name.",
+                name,
+                file_list.join("\n")
+            );
+        }
+    }
+
+    Ok(())
 }

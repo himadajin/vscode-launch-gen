@@ -148,7 +148,6 @@ mod tests {
     #[test]
     fn test_merge_config() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let _generator = create_test_generator(&temp_dir);
 
         let template = json!({
             "type": "cppdbg",
@@ -180,9 +179,6 @@ mod tests {
 
     #[test]
     fn test_validate_unique_names() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-        let generator = create_test_generator(&temp_dir);
-
         let config1 = ConfigFile {
             name: "Test".to_string(),
             extends: "cpp".to_string(),
@@ -204,7 +200,7 @@ mod tests {
             (std::path::PathBuf::from("config2.json"), config2),
         ];
 
-        let result = generator.validate_unique_names(&configs);
+        let result = crate::generator::validate_unique_names(&configs);
         assert!(result.is_err());
         assert!(
             result
