@@ -1,6 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
+use std::fs;
+use std::io::Write;
+use serde_json::to_string_pretty;
 use vscode_launch_gen::Generator;
 
 /// Command line interface for VSCode launch.json generator
@@ -25,16 +28,24 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let generator = Generator::new(cli.dir, cli.output);
+    let output_path = cli.output.clone();
+    let generator = Generator::new(cli.dir, output_path.clone());
 
-    match generator.generate() {
-        Ok(()) => {
-            if cli.verbose {
-                let config_count = generator.collect_config_files()?.len();
-                println!("Generated launch.json with {} configurations", config_count);
-            }
-            Ok(())
-        }
-        Err(e) => Err(e),
+    let launch = generator.generate()?;
+
+    // Ensure output directory exists and write file
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
     }
+    let mut f = fs::File::create(&output_path)?;
+    f.write_all(to_string_pretty(&launch)?.as_bytes())?;
+
+    if cli.verbose {
+        println!(
+            "Generated launch.json with {} configurations",
+            launch.configurations().len()
+        );
+    }
+
+    Ok(())
 }

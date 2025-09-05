@@ -139,18 +139,13 @@ fn test_full_generation_process() -> Result<()> {
         temp_dir.path().join(".vscode/launch.json"),
     );
 
-    generator.generate()?;
-
-    let output_path = temp_dir.path().join(".vscode/launch.json");
-    assert!(output_path.exists());
-
-    let content = fs::read_to_string(output_path)?;
-    let v: serde_json::Value = serde_json::from_str(&content)?;
+    let launch = generator.generate()?;
+    let v: serde_json::Value = serde_json::to_value(&launch)?;
     assert_eq!(v["version"], "0.2.0");
     let configurations = v["configurations"].as_array().unwrap();
     assert_eq!(configurations.len(), 4);
 
-    // Check configurations are in alphabetical order by filename
+    // Check configurations are in alphabetical order by configuration name
     let names: Vec<&str> = configurations
         .iter()
         .map(|c| c["name"].as_str().unwrap())
@@ -159,35 +154,39 @@ fn test_full_generation_process() -> Result<()> {
     println!("Generated names: {:?}", names);
     assert_eq!(
         names,
-        vec!["Debug Basic", "Debug with Input", "Benchmark", "LLDB Debug"]
+        vec!["Benchmark", "Debug Basic", "Debug with Input", "LLDB Debug"]
     );
 
-    // Check first configuration (Debug Basic - from 01-debug-basic.json)
-    let basic_config = &configurations[0];
-    assert_eq!(basic_config["name"], "Debug Basic");
+    // Helper to find config by name for assertions below
+    let find_by_name = |n: &str| -> &serde_json::Value {
+        configurations
+            .iter()
+            .find(|c| c["name"].as_str().unwrap() == n)
+            .unwrap()
+    };
+
+    // Check Debug Basic
+    let basic_config = find_by_name("Debug Basic");
     assert_eq!(basic_config["args"], json!([]));
     assert_eq!(basic_config["cwd"], "${workspaceFolder}"); // From template
 
-    // Check second configuration (Debug with Input) combines baseArgs + args
-    let input_config = &configurations[1];
-    assert_eq!(input_config["name"], "Debug with Input");
+    // Check Debug with Input (baseArgs + args)
+    let input_config = find_by_name("Debug with Input");
     assert_eq!(
         input_config["args"],
         json!(["input.json", "-o", "output.json", "--verbose"])
     );
 
-    // Check third configuration (Benchmark - from 03-benchmark.json)
-    let benchmark_config = &configurations[2];
-    assert_eq!(benchmark_config["name"], "Benchmark");
+    // Check Benchmark
+    let benchmark_config = find_by_name("Benchmark");
     assert_eq!(benchmark_config["type"], "cppdbg");
     assert_eq!(
         benchmark_config["args"],
         json!(["--benchmark", "--iterations", "1000"])
     );
 
-    // Check fourth configuration (LLDB Debug - from 04-lldb-debug.json)
-    let lldb_config = &configurations[3];
-    assert_eq!(lldb_config["name"], "LLDB Debug");
+    // Check LLDB Debug
+    let lldb_config = find_by_name("LLDB Debug");
     assert_eq!(lldb_config["type"], "lldb"); // Different template
     assert!(lldb_config.get("MIMode").is_none()); // LLDB template doesn't have MIMode
 

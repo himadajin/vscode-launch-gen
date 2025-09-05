@@ -93,9 +93,15 @@ impl Resolver {
 }
 
 #[derive(Debug, Serialize)]
-struct LaunchJson {
+pub struct LaunchJson {
     version: String,
     configurations: Vec<LaunchConfig>,
+}
+
+impl LaunchJson {
+    pub fn configurations(&self) -> &[LaunchConfig] {
+        &self.configurations
+    }
 }
 
 /// Main generator for creating VSCode launch.json from templates and configs
@@ -103,12 +109,11 @@ pub struct Generator {
     config_dir: PathBuf,
     templates_dir: PathBuf,
     configs_dir: PathBuf,
-    output_path: PathBuf,
 }
 
 impl Generator {
     /// Creates a new generator instance with directory paths
-    pub fn new(config_dir: PathBuf, output_path: PathBuf) -> Self {
+    pub fn new(config_dir: PathBuf, _output_path: PathBuf) -> Self {
         let templates_dir = config_dir.join("templates");
         let configs_dir = config_dir.join("configs");
 
@@ -116,51 +121,15 @@ impl Generator {
             config_dir,
             templates_dir,
             configs_dir,
-            output_path,
         }
     }
 
-    /// Collects all JSON config files from configs directory in alphabetical order
-    pub fn collect_config_files(&self) -> Result<Vec<PathBuf>> {
-        if !self.configs_dir.exists() {
-            anyhow::bail!(
-                "Config directory does not exist: {}",
-                self.configs_dir.display()
-            );
-        }
+    // Collecting configs moved to free functions below
 
-        let mut config_files = Vec::new();
+    // No file output here; writing is handled by main
 
-        for entry in fs::read_dir(&self.configs_dir).with_context(|| {
-            format!(
-                "Failed to read configs directory: {}",
-                self.configs_dir.display()
-            )
-        })? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
-                config_files.push(path);
-            }
-        }
-
-        config_files.sort();
-        Ok(config_files)
-    }
-
-    /// Ensures the output directory exists, creating it if necessary
-    fn ensure_output_dir(&self) -> Result<()> {
-        if let Some(parent) = self.output_path.parent() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!("Failed to create output directory: {}", parent.display())
-            })?;
-        }
-        Ok(())
-    }
-
-    /// Main generation process - reads configs, merges with templates, and writes launch.json
-    pub fn generate(&self) -> Result<()> {
+    /// Main generation process - reads configs, merges with templates, and returns LaunchJson
+    pub fn generate(&self) -> Result<LaunchJson> {
         if !self.config_dir.exists() {
             anyhow::bail!(
                 "Config directory does not exist: {}",
@@ -175,19 +144,13 @@ impl Generator {
             );
         }
 
-        let config_files = self.collect_config_files()?;
+        let configs = collect_config_files(&self.configs_dir)?;
 
-        if config_files.is_empty() {
+        if configs.is_empty() {
             anyhow::bail!(
                 "No configuration files found in: {}",
                 self.configs_dir.display()
             );
-        }
-
-        let mut configs = Vec::new();
-        for config_path in config_files {
-            let config = ConfigFile::from_path(&config_path)?;
-            configs.push((config_path, config));
         }
 
         // Filter out disabled configurations before validation
@@ -215,25 +178,50 @@ impl Generator {
             configurations.push(merged);
         }
 
+        // Sort configurations by display name to stabilize order
+        configurations.sort_by(|a, b| a.name.cmp(&b.name));
+
         let launch_json = LaunchJson {
             version: "0.2.0".to_string(),
             configurations,
         };
 
-        self.ensure_output_dir()?;
-
-        let json_content = serde_json::to_string_pretty(&launch_json)
-            .context("Failed to serialize launch.json")?;
-
-        fs::write(&self.output_path, json_content).with_context(|| {
-            format!(
-                "Failed to write output file: {}",
-                self.output_path.display()
-            )
-        })?;
-
-        Ok(())
+        Ok(launch_json)
     }
+}
+
+/// Collects all JSON config files from `configs_dir` in alphabetical order
+pub(crate) fn collect_config_files(configs_dir: &Path) -> Result<Vec<(PathBuf, ConfigFile)>> {
+    if !configs_dir.exists() {
+        anyhow::bail!(
+            "Config directory does not exist: {}",
+            configs_dir.display()
+        );
+    }
+
+    let mut config_files: Vec<PathBuf> = Vec::new();
+
+    for entry in fs::read_dir(configs_dir).with_context(|| {
+        format!("Failed to read configs directory: {}",
+            configs_dir.display())
+    })? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() && path.extension().and_then(|s| s.to_str()) == Some("json") {
+            config_files.push(path);
+        }
+    }
+
+    config_files.sort();
+
+    // Load after collecting all paths
+    let mut configs: Vec<(PathBuf, ConfigFile)> = Vec::new();
+    for config_path in config_files.into_iter() {
+        let config = ConfigFile::from_path(&config_path)?;
+        configs.push((config_path, config));
+    }
+    Ok(configs)
 }
 
 /// Validates that all configuration names are unique across files

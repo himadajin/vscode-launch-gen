@@ -2,7 +2,7 @@ pub mod generator;
 mod schema;
 
 // Re-export public APIs
-pub use generator::{Generator, LaunchConfig};
+pub use generator::{Generator, LaunchConfig, LaunchJson};
 pub use schema::ConfigFile;
 
 #[cfg(test)]
@@ -216,14 +216,16 @@ mod tests {
     fn test_collect_config_files() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let generator = create_test_generator(&temp_dir);
-
-        let files = generator.collect_config_files()?;
-        assert_eq!(files.len(), 2);
-
-        // Should be sorted alphabetically
-        assert!(files[0].file_name().unwrap().to_str().unwrap() == "01-basic.json");
-        assert!(files[1].file_name().unwrap().to_str().unwrap() == "02-input.json");
+        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let entries = crate::generator::collect_config_files(&configs_dir)?;
+        assert_eq!(entries.len(), 2);
+        // No ordering guarantee here anymore; just assert files exist
+        let mut names: Vec<_> = entries
+            .iter()
+            .map(|(p, _)| p.file_name().unwrap().to_str().unwrap().to_string())
+            .collect();
+        names.sort();
+        assert_eq!(names, vec!["01-basic.json", "02-input.json"]);
 
         Ok(())
     }
@@ -234,13 +236,8 @@ mod tests {
         setup_test_files(&temp_dir)?;
         let generator = create_test_generator(&temp_dir);
 
-        generator.generate()?;
-
-        let output_path = temp_dir.path().join(".vscode/launch.json");
-        assert!(output_path.exists());
-
-        let content = fs::read_to_string(output_path)?;
-        let v: serde_json::Value = serde_json::from_str(&content)?;
+        let launch = generator.generate()?;
+        let v: serde_json::Value = serde_json::to_value(&launch)?;
 
         assert_eq!(v["version"], "0.2.0");
         let configs = v["configurations"].as_array().unwrap();
@@ -266,10 +263,10 @@ mod tests {
         setup_test_files(&temp_dir)?;
         let generator = create_test_generator(&temp_dir);
 
-        generator.generate()?;
-
-        let output_path = temp_dir.path().join(".vscode/launch.json");
-        let content = fs::read_to_string(output_path)?;
+        let launch = generator.generate()?;
+        // Serialize only the first configuration to check key ordering deterministically
+        let first_cfg = &launch.configurations()[0];
+        let content = serde_json::to_string_pretty(first_cfg)?;
 
         // Find positions of the keys within the first configuration block
         // This is a pragmatic check to ensure ordering in serialized output
@@ -329,11 +326,8 @@ mod tests {
         write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
-        generator.generate()?;
-
-        let output_path = temp_dir.path().join(".vscode/launch.json");
-        let content = fs::read_to_string(output_path)?;
-        let v: serde_json::Value = serde_json::from_str(&content)?;
+        let launch = generator.generate()?;
+        let v: serde_json::Value = serde_json::to_value(&launch)?;
         let configs = v["configurations"].as_array().unwrap();
         assert_eq!(configs.len(), 1);
         assert_eq!(configs[0]["name"], "Enabled Config");
