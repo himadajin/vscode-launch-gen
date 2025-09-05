@@ -398,4 +398,44 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_template_with_args_is_error() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+
+        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&configs_dir)?;
+
+        // Template that wrongly includes args
+        let bad_template = json!({
+            "type": "cppdbg",
+            "program": "${workspaceFolder}/build/myapp",
+            "args": ["--should-not-be-here"]
+        });
+        fs::write(
+            templates_dir.join("cpp.json"),
+            serde_json::to_string_pretty(&bad_template)?,
+        )?;
+
+        // Minimal config
+        let config = json!({
+            "name": "Bad",
+            "extends": "cpp",
+            "enabled": true
+        });
+        fs::write(
+            configs_dir.join("bad.json"),
+            serde_json::to_string_pretty(&config)?,
+        )?;
+
+        let generator = create_test_generator(&temp_dir);
+        let result = generator.generate();
+
+        assert!(result.is_err());
+        assert!(result.is_err());
+
+        Ok(())
+    }
 }

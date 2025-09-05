@@ -17,6 +17,7 @@ pub struct LaunchConfig {
     name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     program: Option<String>,
+    args: Vec<String>,
     #[serde(rename = "stopAtEntry", skip_serializing_if = "Option::is_none")]
     stop_at_entry: Option<bool>,
     #[serde(flatten)]
@@ -213,19 +214,20 @@ impl LaunchConfig {
                 TemplateFile::from_path(&template_path)?
             }
         };
-        let mut rest = tmpl.rest.clone();
+        // Sanity check: templates must not provide args (enforced at parse time)
+        debug_assert!(
+            !tmpl.rest.contains_key("args"),
+            "Template rest must not contain 'args'"
+        );
 
-        // Build args: baseArgs (if any) + args (if any)
-        if config.args.is_some() || config.base_args.is_some() {
-            let mut final_args: Vec<String> = Vec::new();
-            if let Some(base_path) = &config.base_args {
-                let base = BaseArgsFile::from_path(base_path)?;
-                final_args.extend(base.args);
-            }
-            if let Some(extra) = &config.args {
-                final_args.extend(extra.clone());
-            }
-            rest.insert("args".to_string(), serde_json::json!(final_args));
+        // Build args: baseArgs (if any) + args (if any). Always present (can be empty)
+        let mut args: Vec<String> = Vec::new();
+        if let Some(base_path) = &config.base_args {
+            let base = BaseArgsFile::from_path(base_path)?;
+            args.extend(base.args);
+        }
+        if let Some(extra) = &config.args {
+            args.extend(extra.clone());
         }
 
         Ok(LaunchConfig {
@@ -233,8 +235,9 @@ impl LaunchConfig {
             request: tmpl.request,
             name: config.name,
             program: tmpl.program,
+            args,
             stop_at_entry: tmpl.stop_at_entry,
-            rest,
+            rest: tmpl.rest.clone(),
         })
     }
 
@@ -243,26 +246,29 @@ impl LaunchConfig {
         config: ConfigFile,
         tmpl: TemplateFile,
     ) -> Result<Self> {
-        let mut rest = tmpl.rest.clone();
-        if config.args.is_some() || config.base_args.is_some() {
-            let mut final_args: Vec<String> = Vec::new();
-            if let Some(base_path) = &config.base_args {
-                let base = BaseArgsFile::from_path(base_path)?;
-                final_args.extend(base.args);
-            }
-            if let Some(extra) = &config.args {
-                final_args.extend(extra.clone());
-            }
-            rest.insert("args".to_string(), serde_json::json!(final_args));
+        let mut args: Vec<String> = Vec::new();
+        if let Some(base_path) = &config.base_args {
+            let base = BaseArgsFile::from_path(base_path)?;
+            args.extend(base.args);
         }
+        if let Some(extra) = &config.args {
+            args.extend(extra.clone());
+        }
+
+        // Sanity check: templates must not provide args (enforced at parse time)
+        debug_assert!(
+            !tmpl.rest.contains_key("args"),
+            "Template rest must not contain 'args'"
+        );
 
         Ok(LaunchConfig {
             type_field: tmpl.type_field,
             request: tmpl.request,
             name: config.name,
             program: tmpl.program,
+            args,
             stop_at_entry: tmpl.stop_at_entry,
-            rest,
+            rest: tmpl.rest.clone(),
         })
     }
 }

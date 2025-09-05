@@ -70,15 +70,14 @@ pub(crate) struct TemplateFile {
 impl TemplateFile {
     pub fn from_path(template_path: &Path) -> Result<Self> {
         if !template_path.exists() {
-            anyhow::bail!(
-                "Template file not found: {}",
-                template_path.display()
-            );
+            anyhow::bail!("Template file not found: {}", template_path.display());
         }
-        let content = fs::read_to_string(template_path)
-            .with_context(|| format!("Failed to read template file: {}", template_path.display()))?;
-        let v: Value = serde_json::from_str(&content)
-            .with_context(|| format!("Failed to parse template JSON: {}", template_path.display()))?;
+        let content = fs::read_to_string(template_path).with_context(|| {
+            format!("Failed to read template file: {}", template_path.display())
+        })?;
+        let v: Value = serde_json::from_str(&content).with_context(|| {
+            format!("Failed to parse template JSON: {}", template_path.display())
+        })?;
         Self::from_value(v)
     }
 
@@ -87,6 +86,11 @@ impl TemplateFile {
             Value::Object(obj) => obj,
             _ => anyhow::bail!("Template must be a JSON object"),
         };
+
+        // Disallow 'args' in templates to avoid ambiguity with per-config args/baseArgs
+        if template_obj.contains_key("args") {
+            anyhow::bail!("Template must not define 'args'; use config files to set args");
+        }
 
         let type_field = template_obj
             .get("type")
@@ -104,9 +108,7 @@ impl TemplateFile {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let stop_at_entry = template_obj
-            .get("stopAtEntry")
-            .and_then(|v| v.as_bool());
+        let stop_at_entry = template_obj.get("stopAtEntry").and_then(|v| v.as_bool());
 
         let mut rest: Map<String, Value> = Map::with_capacity(template_obj.len());
         for (k, v) in template_obj.iter() {
