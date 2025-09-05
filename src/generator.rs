@@ -119,10 +119,6 @@ impl Generator {
         }
     }
 
-    // Collecting configs moved to free functions below
-
-    // No file output here; writing is handled by main
-
     /// Main generation process - reads configs, merges with templates, and returns LaunchJson
     pub fn generate(&self) -> Result<LaunchJson> {
         if !self.templates_dir.exists() {
