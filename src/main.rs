@@ -32,16 +32,15 @@ struct Cli {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let output_path = cli.output.clone();
     let generator = Generator::new(cli.templates, cli.configs);
 
     let launch = generator.generate()?;
 
     // Ensure output directory exists and write file
-    if let Some(parent) = output_path.parent() {
+    if let Some(parent) = cli.output.parent() {
         fs::create_dir_all(parent)?;
     }
-    let mut f = fs::File::create(&output_path)?;
+    let mut f = fs::File::create(&cli.output)?;
     f.write_all(to_string_pretty(&launch)?.as_bytes())?;
 
     if cli.verbose {
