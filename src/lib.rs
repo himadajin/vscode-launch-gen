@@ -40,19 +40,23 @@ mod tests {
         write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create config files (new schema with top-level args)
-        let config1 = json!({
-            "name": "Basic Test",
-            "extends": "cpp",
-            "enabled": true,
-            "args": ["--test"]
-        });
+        let config1 = json!([
+            {
+                "name": "Basic Test",
+                "extends": "cpp",
+                "enabled": true,
+                "args": ["--test"]
+            }
+        ]);
 
-        let config2 = json!({
-            "name": "Test with Input",
-            "extends": "cpp",
-            "enabled": true,
-            "args": ["--input", "data.txt"]
-        });
+        let config2 = json!([
+            {
+                "name": "Test with Input",
+                "extends": "cpp",
+                "enabled": true,
+                "args": ["--input", "data.txt"]
+            }
+        ]);
 
         write_json(configs_dir.join("01-basic.json"), &config1)?;
         write_json(configs_dir.join("02-input.json"), &config2)?;
@@ -107,7 +111,9 @@ mod tests {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
         let config_path = temp_dir.path().join(".vscode-debug/configs/01-basic.json");
-        let config = ConfigFile::from_path(&config_path)?;
+        let configs = ConfigFile::from_path(&config_path)?;
+        assert_eq!(configs.len(), 1);
+        let config = &configs[0];
 
         assert_eq!(config.extends, "cpp");
         assert_eq!(config.name, "Basic Test");
@@ -122,11 +128,13 @@ mod tests {
         let configs_dir = temp_dir.path().join(".vscode-debug/configs");
         fs::create_dir_all(&configs_dir)?;
 
-        let invalid_config = json!({
-            "name": "Invalid Test",
-            "extends": "../other/template",
-            "enabled": true
-        });
+        let invalid_config = json!([
+            {
+                "name": "Invalid Test",
+                "extends": "../other/template",
+                "enabled": true
+            }
+        ]);
 
         let config_path = configs_dir.join("invalid.json");
         write_json(&config_path, &invalid_config)?;
@@ -140,6 +148,22 @@ mod tests {
                 .to_string()
                 .contains("Invalid extends value")
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_config_empty_array_ok() -> anyhow::Result<()> {
+        let temp_dir = TempDir::new()?;
+        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        fs::create_dir_all(&configs_dir)?;
+
+        let empty_config = json!([]);
+        let config_path = configs_dir.join("empty.json");
+        write_json(&config_path, &empty_config)?;
+
+        let configs = ConfigFile::from_path(&config_path)?;
+        assert!(configs.is_empty());
 
         Ok(())
     }
@@ -307,21 +331,25 @@ mod tests {
         write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create enabled config
-        let enabled_config = json!({
-            "name": "Enabled Config",
-            "extends": "cpp",
-            "enabled": true,
-            "args": ["--enabled"]
-        });
+        let enabled_config = json!([
+            {
+                "name": "Enabled Config",
+                "extends": "cpp",
+                "enabled": true,
+                "args": ["--enabled"]
+            }
+        ]);
         write_json(configs_dir.join("enabled.json"), &enabled_config)?;
 
         // Create disabled config
-        let disabled_config = json!({
-            "name": "Disabled Config",
-            "extends": "cpp",
-            "enabled": false,
-            "args": ["--disabled"]
-        });
+        let disabled_config = json!([
+            {
+                "name": "Disabled Config",
+                "extends": "cpp",
+                "enabled": false,
+                "args": ["--disabled"]
+            }
+        ]);
         write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
@@ -351,12 +379,14 @@ mod tests {
         write_json(templates_dir.join("cpp.json"), &template)?;
 
         // Create only disabled config
-        let disabled_config = json!({
-            "name": "Disabled Config",
-            "extends": "cpp",
-            "enabled": false,
-            "args": ["--disabled"]
-        });
+        let disabled_config = json!([
+            {
+                "name": "Disabled Config",
+                "extends": "cpp",
+                "enabled": false,
+                "args": ["--disabled"]
+            }
+        ]);
         write_json(configs_dir.join("disabled.json"), &disabled_config)?;
 
         let generator = create_test_generator(&temp_dir);
@@ -367,7 +397,7 @@ mod tests {
             result
                 .unwrap_err()
                 .to_string()
-                .contains("No enabled configuration files found")
+                .contains("No enabled configuration entries found")
         );
 
         Ok(())
@@ -391,11 +421,13 @@ mod tests {
         write_json(templates_dir.join("cpp.json"), &bad_template)?;
 
         // Minimal config
-        let config = json!({
-            "name": "Bad",
-            "extends": "cpp",
-            "enabled": true
-        });
+        let config = json!([
+            {
+                "name": "Bad",
+                "extends": "cpp",
+                "enabled": true
+            }
+        ]);
         write_json(configs_dir.join("bad.json"), &config)?;
 
         let generator = create_test_generator(&temp_dir);

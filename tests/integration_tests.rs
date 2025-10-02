@@ -68,40 +68,48 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
     let configs = vec![
         (
             "01-debug-basic.json",
-            json!({
-                "name": "Debug Basic",
-                "extends": "cpp",
-                "enabled": true,
-                "args": []
-            }),
+            json!([
+                {
+                    "name": "Debug Basic",
+                    "extends": "cpp",
+                    "enabled": true,
+                    "args": []
+                }
+            ]),
         ),
         (
             "02-debug-with-input.json",
-            json!({
-                "name": "Debug with Input",
-                "extends": "cpp",
-                "enabled": true,
-                "baseArgs": base_args_path.to_string_lossy(),
-                "args": ["--verbose"]
-            }),
+            json!([
+                {
+                    "name": "Debug with Input",
+                    "extends": "cpp",
+                    "enabled": true,
+                    "baseArgs": base_args_path.to_string_lossy(),
+                    "args": ["--verbose"]
+                }
+            ]),
         ),
         (
             "03-benchmark.json",
-            json!({
-                "name": "Benchmark",
-                "extends": "cpp",
-                "enabled": true,
-                "args": ["--benchmark", "--iterations", "1000"]
-            }),
+            json!([
+                {
+                    "name": "Benchmark",
+                    "extends": "cpp",
+                    "enabled": true,
+                    "args": ["--benchmark", "--iterations", "1000"]
+                }
+            ]),
         ),
         (
             "04-lldb-debug.json",
-            json!({
-                "name": "LLDB Debug",
-                "extends": "lldb",
-                "enabled": true,
-                "args": ["--debug"]
-            }),
+            json!([
+                {
+                    "name": "LLDB Debug",
+                    "extends": "lldb",
+                    "enabled": true,
+                    "args": ["--debug"]
+                }
+            ]),
         ),
     ];
 
@@ -198,11 +206,13 @@ fn test_error_missing_template() -> Result<()> {
     fs::create_dir_all(&configs_dir)?;
 
     // Create config that references non-existent template (new schema)
-    let config = json!({
-        "name": "Test",
-        "extends": "nonexistent",
-        "enabled": true
-    });
+    let config = json!([
+        {
+            "name": "Test",
+            "extends": "nonexistent",
+            "enabled": true
+        }
+    ]);
 
     write_json(configs_dir.join("test.json"), &config)?;
 
@@ -230,17 +240,21 @@ fn test_error_duplicate_names() -> Result<()> {
     write_json(templates_dir.join("cpp.json"), &template)?;
 
     // Create two configs with same name
-    let config1 = json!({
-        "name": "Duplicate Name",
-        "extends": "cpp",
-        "enabled": true
-    });
+    let config1 = json!([
+        {
+            "name": "Duplicate Name",
+            "extends": "cpp",
+            "enabled": true
+        }
+    ]);
 
-    let config2 = json!({
-        "name": "Duplicate Name",
-        "extends": "cpp",
-        "enabled": true
-    });
+    let config2 = json!([
+        {
+            "name": "Duplicate Name",
+            "extends": "cpp",
+            "enabled": true
+        }
+    ]);
 
     write_json(configs_dir.join("config1.json"), &config1)?;
     write_json(configs_dir.join("config2.json"), &config2)?;
@@ -261,16 +275,76 @@ fn test_error_duplicate_names() -> Result<()> {
 }
 
 #[test]
+fn test_multiple_configs_in_single_file() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let (templates_dir, configs_dir) = create_dirs(temp_dir.path())?;
+
+    // Create template used by all entries
+    let template = json!({
+        "type": "cppdbg",
+        "program": "${workspaceFolder}/bin/app"
+    });
+    write_json(templates_dir.join("cpp.json"), &template)?;
+
+    // Single file providing two enabled configurations
+    let multi_config = json!([
+        {
+            "name": "First Multi",
+            "extends": "cpp",
+            "enabled": true,
+            "args": ["--first"]
+        },
+        {
+            "name": "Second Multi",
+            "extends": "cpp",
+            "enabled": true,
+            "args": ["--second"]
+        }
+    ]);
+    write_json(configs_dir.join("multi.json"), &multi_config)?;
+
+    let base = temp_dir.path().join(".vscode-debug");
+    let generator = Generator::new(base.join("templates"), base.join("configs"));
+
+    let launch = generator.generate()?;
+    let v: serde_json::Value = serde_json::to_value(&launch)?;
+    let configs = v["configurations"].as_array().unwrap();
+    assert_eq!(configs.len(), 2);
+
+    let names: Vec<&str> = configs
+        .iter()
+        .map(|cfg| cfg["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, vec!["First Multi", "Second Multi"]);
+
+    let first = configs
+        .iter()
+        .find(|cfg| cfg["name"] == "First Multi")
+        .unwrap();
+    assert_eq!(first["args"], json!(["--first"]));
+
+    let second = configs
+        .iter()
+        .find(|cfg| cfg["name"] == "Second Multi")
+        .unwrap();
+    assert_eq!(second["args"], json!(["--second"]));
+
+    Ok(())
+}
+
+#[test]
 fn test_error_invalid_extends() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let (_, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create config with invalid extends path
-    let config = json!({
-        "name": "Invalid Test",
-        "extends": "../other/template",
-        "enabled": true
-    });
+    let config = json!([
+        {
+            "name": "Invalid Test",
+            "extends": "../other/template",
+            "enabled": true
+        }
+    ]);
 
     write_json(configs_dir.join("invalid.json"), &config)?;
 
@@ -306,7 +380,7 @@ fn test_empty_configs_directory() -> Result<()> {
         result
             .unwrap_err()
             .to_string()
-            .contains("No configuration files found")
+            .contains("No configuration entries found")
     );
 
     Ok(())

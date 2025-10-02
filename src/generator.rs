@@ -132,7 +132,7 @@ impl Generator {
 
         if configs.is_empty() {
             anyhow::bail!(
-                "No configuration files found in: {}",
+                "No configuration entries found in: {}",
                 self.configs_dir.display()
             );
         }
@@ -145,7 +145,7 @@ impl Generator {
 
         if enabled_configs.is_empty() {
             anyhow::bail!(
-                "No enabled configuration files found in: {}",
+                "No enabled configuration entries found in: {}",
                 self.configs_dir.display()
             );
         }
@@ -174,7 +174,7 @@ impl Generator {
     }
 }
 
-/// Collects all JSON config files from `configs_dir` in alphabetical order
+/// Collects all JSON config entries from `configs_dir` in alphabetical order of file path
 pub(crate) fn collect_config_files(configs_dir: &Path) -> Result<Vec<(PathBuf, ConfigFile)>> {
     if !configs_dir.exists() {
         anyhow::bail!("Config directory does not exist: {}", configs_dir.display());
@@ -201,8 +201,10 @@ pub(crate) fn collect_config_files(configs_dir: &Path) -> Result<Vec<(PathBuf, C
     // Load after collecting all paths
     let mut configs: Vec<(PathBuf, ConfigFile)> = Vec::new();
     for config_path in config_files.into_iter() {
-        let config = ConfigFile::from_path(&config_path)?;
-        configs.push((config_path, config));
+        let entries = ConfigFile::from_path(&config_path)?;
+        for config in entries {
+            configs.push((config_path.clone(), config));
+        }
     }
     Ok(configs)
 }
