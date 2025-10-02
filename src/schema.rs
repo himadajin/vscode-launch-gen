@@ -20,7 +20,7 @@ impl BaseArgsFile {
     }
 }
 
-/// Individual configuration file structure with template reference and overrides
+/// Individual configuration entry with template reference and overrides
 #[derive(Debug, Deserialize)]
 pub struct ConfigFile {
     /// Unique configuration name displayed in VSCode
@@ -37,23 +37,66 @@ pub struct ConfigFile {
 }
 
 impl ConfigFile {
-    /// Loads and validates a configuration file from a path
-    pub fn from_path(config_path: &Path) -> Result<Self> {
+    /// Loads and validates configuration entries from a path. Returns one entry per JSON object.
+    pub fn from_path(config_path: &Path) -> Result<Vec<Self>> {
         let content = fs::read_to_string(config_path)
             .with_context(|| format!("Failed to read config file: {}", config_path.display()))?;
 
-        let config: ConfigFile = serde_json::from_str(&content)
+        let raw: Value = serde_json::from_str(&content)
             .with_context(|| format!("Failed to parse config JSON: {}", config_path.display()))?;
 
-        if config.extends.contains('/') || config.extends.contains('\\') {
+        let entries = match raw {
+            Value::Array(items) => items,
+            Value::Object(_) => {
+                anyhow::bail!(
+                    "{} must be a JSON array of configuration objects. Legacy single-object configs are no longer supported.",
+                    config_path.display()
+                );
+            }
+            other => {
+                let type_name = match other {
+                    Value::Null => "null",
+                    Value::Bool(_) => "boolean",
+                    Value::Number(_) => "number",
+                    Value::String(_) => "string",
+                    Value::Array(_) => unreachable!(),
+                    Value::Object(_) => unreachable!(),
+                };
+                anyhow::bail!(
+                    "{} must be a JSON array of configuration objects, found {} instead.",
+                    config_path.display(),
+                    type_name
+                );
+            }
+        };
+
+        entries
+            .into_iter()
+            .enumerate()
+            .map(|(idx, entry)| -> Result<_> {
+                let config: ConfigFile = serde_json::from_value(entry).with_context(|| {
+                    format!(
+                        "Failed to parse config JSON entry at index {} in {}",
+                        idx,
+                        config_path.display()
+                    )
+                })?;
+
+                config.validate_extends(config_path)?;
+                Ok(config)
+            })
+            .collect()
+    }
+
+    fn validate_extends(&self, config_path: &Path) -> Result<()> {
+        if self.extends.contains('/') || self.extends.contains('\\') {
             anyhow::bail!(
                 "Invalid extends value '{}' in {}\nOnly template names are allowed (e.g., 'cpp', 'lldb')",
-                config.extends,
+                self.extends,
                 config_path.display()
             );
         }
-
-        Ok(config)
+        Ok(())
     }
 }
 

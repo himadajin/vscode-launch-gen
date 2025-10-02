@@ -57,13 +57,15 @@ Options:
 4. Create configuration files (`configs/basic-test.json`):
 
    ```json
-   {
-     "name": "Basic Test",
-     "extends": "cpp",
-     "enabled": true,
-     "baseArgs": "/path/to/args.json",
-     "args": ["--debug-mode"]
-   }
+   [
+     {
+       "name": "Basic Test",
+       "extends": "cpp",
+       "enabled": true,
+       "baseArgs": "/path/to/args.json",
+       "args": ["--debug-mode"]
+     }
+   ]
    ```
 
 5. Run the tool:
@@ -82,12 +84,12 @@ Options:
          "request": "launch",
          "program": "${workspaceFolder}/build/myapp",
          "MIMode": "gdb",
-         "args": "args": [
-            "-v",
-            "-o",
-            "output.txt",
-            "input.txt",
-            "--debug-mode"
+         "args": [
+           "-v",
+           "-o",
+           "output.txt",
+           "input.txt",
+           "--debug-mode"
          ]
        }
      ]
@@ -122,29 +124,50 @@ vscode-launch-gen --verbose
 
 ## Configuration File Format
 
-Each configuration file in the `configs/` directory must include the following required fields:
+Every file inside the `configs/` directory must be a **JSON array** of configuration objects. Even if a file only defines a single configuration, it must still be wrapped in an array. Empty arrays are permitted and simply contribute no configurations.
 
-- **`name`**: Unique configuration name displayed in VSCode
-- **`extends`**: Template name to use (without .json extension)
-- **`enabled`**: Boolean flag to enable/disable this configuration
-- **`config`**: Object containing debug configuration properties that override template values
-  - Additional debug properties like `args`, `cwd`, `environment`, etc.
+Each configuration object supports the following fields:
+
+- **`name`** *(required)*: Unique configuration name displayed in VSCode.
+- **`extends`** *(required)*: Template name to use (without the `.json` suffix).
+- **`enabled`** *(required)*: Boolean flag to enable/disable this configuration.
+- **`baseArgs`** *(optional)*: Path to a JSON file containing `{ "args": [...] }`. These arguments are prepended.
+- **`args`** *(optional)*: Additional arguments appended after `baseArgs`.
+
+Example with multiple configurations in a single file:
+
+```json
+[
+  {
+    "name": "Debug (fast)",
+    "extends": "cpp",
+    "enabled": true,
+    "args": ["--mode", "fast"]
+  },
+  {
+    "name": "Debug (slow)",
+    "extends": "cpp",
+    "enabled": false,
+    "args": ["--mode", "slow"]
+  }
+]
+```
 
 ### Enabling/Disabling Configurations
 
-You can temporarily disable configurations by setting `enabled: false`:
+You can temporarily disable configurations by setting `enabled: false` inside the array entry:
 
 ```json
-{
-  "name": "Disabled Test",
-  "extends": "cpp",
-  "enabled": false,
-  "config": {
+[
+  {
+    "name": "Disabled Test",
+    "extends": "cpp",
+    "enabled": false,
     "args": ["--test"]
   }
-}
+]
 ```
 
-Disabled configurations will be ignored during generation and won't appear in the final `launch.json` file.
+Disabled entries are ignored during generation and will not appear in the resulting `launch.json`.
 
 This tool is designed to be simple and focused, making it easy to manage multiple debug configurations for your development workflow.
