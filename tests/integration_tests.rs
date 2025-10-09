@@ -1,9 +1,9 @@
 use anyhow::Result;
+use mklaunch::Generator;
 use serde_json::json;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
-use vscode_launch_gen::Generator;
 
 fn create_test_files(base_dir: &Path) -> Result<()> {
     let templates_dir = base_dir.join(".vscode-debug/templates");
@@ -349,7 +349,7 @@ fn test_error_invalid_extends() -> Result<()> {
     write_json(configs_dir.join("invalid.json"), &config)?;
 
     let config_path = configs_dir.join("invalid.json");
-    let result = vscode_launch_gen::ConfigFile::from_path(&config_path);
+    let result = mklaunch::ConfigFile::from_path(&config_path);
 
     assert!(result.is_err());
     assert!(

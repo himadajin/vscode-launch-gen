@@ -1,4 +1,4 @@
-# vscode-launch-gen
+# mklaunch
 
 A simple command-line tool that generates VSCode's debug configuration file (`launch.json`) from modular template and configuration files.
 
@@ -15,7 +15,7 @@ This tool helps you manage complex debug configurations for VSCode by separating
 ## Command Line Options
 
 ```
-vscode-launch-gen [OPTIONS]
+mklaunch [OPTIONS]
 
 Options:
   -d, --dir <PATH>     Configuration directory path [default: .vscode-debug]
@@ -70,7 +70,7 @@ Options:
 
 5. Run the tool:
    ```bash
-   vscode-launch-gen
+   mklaunch
    ```
 
 6. The tool generates `.vscode/launch.json`:
@@ -101,25 +101,25 @@ Options:
 ### Basic usage
 
 ```bash
-vscode-launch-gen
+mklaunch
 ```
 
 ### Custom configuration directory
 
 ```bash
-vscode-launch-gen --dir ./debug-configs
+mklaunch --dir ./debug-configs
 ```
 
 ### Custom output path
 
 ```bash
-vscode-launch-gen --output ./custom/.vscode/launch.json
+mklaunch --output ./custom/.vscode/launch.json
 ```
 
 ### Verbose output
 
 ```bash
-vscode-launch-gen --verbose
+mklaunch --verbose
 ```
 
 ## Configuration File Format
