@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 fn create_test_files(base_dir: &Path) -> Result<()> {
-    let templates_dir = base_dir.join(".vscode-debug/templates");
-    let configs_dir = base_dir.join(".vscode-debug/configs");
+    let templates_dir = base_dir.join(".mklaunch/templates");
+    let configs_dir = base_dir.join(".mklaunch/configs");
 
     fs::create_dir_all(&templates_dir)?;
     fs::create_dir_all(&configs_dir)?;
@@ -125,8 +125,8 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
 
 // Test helpers to reduce duplication across cases
 fn create_dirs(base_dir: &Path) -> Result<(PathBuf, PathBuf)> {
-    let templates_dir = base_dir.join(".vscode-debug/templates");
-    let configs_dir = base_dir.join(".vscode-debug/configs");
+    let templates_dir = base_dir.join(".mklaunch/templates");
+    let configs_dir = base_dir.join(".mklaunch/configs");
     fs::create_dir_all(&templates_dir)?;
     fs::create_dir_all(&configs_dir)?;
     Ok((templates_dir, configs_dir))
@@ -142,7 +142,7 @@ fn test_full_generation_process() -> Result<()> {
     let temp_dir = TempDir::new()?;
     create_test_files(temp_dir.path())?;
 
-    let base = temp_dir.path().join(".vscode-debug");
+    let base = temp_dir.path().join(".mklaunch");
     let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let launch = generator.generate()?;
@@ -202,7 +202,7 @@ fn test_full_generation_process() -> Result<()> {
 #[test]
 fn test_error_missing_template() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+    let configs_dir = temp_dir.path().join(".mklaunch/configs");
     fs::create_dir_all(&configs_dir)?;
 
     // Create config that references non-existent template (new schema)
@@ -216,7 +216,7 @@ fn test_error_missing_template() -> Result<()> {
 
     write_json(configs_dir.join("test.json"), &config)?;
 
-    let base = temp_dir.path().join(".vscode-debug");
+    let base = temp_dir.path().join(".mklaunch");
     let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let result = generator.generate();
@@ -259,7 +259,7 @@ fn test_error_duplicate_names() -> Result<()> {
     write_json(configs_dir.join("config1.json"), &config1)?;
     write_json(configs_dir.join("config2.json"), &config2)?;
 
-    let base = temp_dir.path().join(".vscode-debug");
+    let base = temp_dir.path().join(".mklaunch");
     let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let result = generator.generate();
@@ -303,7 +303,7 @@ fn test_multiple_configs_in_single_file() -> Result<()> {
     ]);
     write_json(configs_dir.join("multi.json"), &multi_config)?;
 
-    let base = temp_dir.path().join(".vscode-debug");
+    let base = temp_dir.path().join(".mklaunch");
     let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let launch = generator.generate()?;
@@ -371,7 +371,7 @@ fn test_empty_configs_directory() -> Result<()> {
     let template = json!({"type": "cppdbg"});
     write_json(templates_dir.join("cpp.json"), &template)?;
 
-    let base = temp_dir.path().join(".vscode-debug");
+    let base = temp_dir.path().join(".mklaunch");
     let generator = Generator::new(base.join("templates"), base.join("configs"));
 
     let result = generator.generate();

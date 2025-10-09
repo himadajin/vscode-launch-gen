@@ -14,13 +14,13 @@ mod tests {
     use tempfile::TempDir;
 
     fn create_test_generator(temp_dir: &TempDir) -> Generator {
-        let base = temp_dir.path().join(".vscode-debug");
+        let base = temp_dir.path().join(".mklaunch");
         Generator::new(base.join("templates"), base.join("configs"))
     }
 
     fn setup_test_files(temp_dir: &TempDir) -> anyhow::Result<()> {
-        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let templates_dir = temp_dir.path().join(".mklaunch/templates");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
 
         fs::create_dir_all(&templates_dir)?;
         fs::create_dir_all(&configs_dir)?;
@@ -73,7 +73,7 @@ mod tests {
     fn test_load_template() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let templates_dir = temp_dir.path().join(".mklaunch/templates");
         let config = ConfigFile {
             name: "Dummy".to_string(),
             extends: "cpp".to_string(),
@@ -93,7 +93,7 @@ mod tests {
     fn test_load_template_not_found() {
         let temp_dir = TempDir::new().unwrap();
         setup_test_files(&temp_dir).unwrap();
-        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
+        let templates_dir = temp_dir.path().join(".mklaunch/templates");
         let config = ConfigFile {
             name: "Dummy".to_string(),
             extends: "nonexistent".to_string(),
@@ -110,7 +110,7 @@ mod tests {
     fn test_load_config() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let config_path = temp_dir.path().join(".vscode-debug/configs/01-basic.json");
+        let config_path = temp_dir.path().join(".mklaunch/configs/01-basic.json");
         let configs = ConfigFile::from_path(&config_path)?;
         assert_eq!(configs.len(), 1);
         let config = &configs[0];
@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn test_load_config_invalid_extends() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
         fs::create_dir_all(&configs_dir)?;
 
         let invalid_config = json!([
@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn test_load_config_empty_array_ok() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
         fs::create_dir_all(&configs_dir)?;
 
         let empty_config = json!([]);
@@ -188,8 +188,7 @@ mod tests {
         };
 
         // Local helper: resolve using Resolver with in-memory template
-        let resolver =
-            crate::generator::Resolver::new(temp_dir.path().join(".vscode-debug/templates"));
+        let resolver = crate::generator::Resolver::new(temp_dir.path().join(".mklaunch/templates"));
         let ordered = resolver.resolve(config, Some(template))?;
         let merged = serde_json::to_value(ordered)?;
 
@@ -239,7 +238,7 @@ mod tests {
     fn test_collect_config_files() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
         let entries = crate::generator::collect_config_files(&configs_dir)?;
         assert_eq!(entries.len(), 2);
         // No ordering guarantee here anymore; just assert files exist
@@ -317,8 +316,8 @@ mod tests {
     #[test]
     fn test_disabled_config_excluded() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let templates_dir = temp_dir.path().join(".mklaunch/templates");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
 
         fs::create_dir_all(&templates_dir)?;
         fs::create_dir_all(&configs_dir)?;
@@ -365,8 +364,8 @@ mod tests {
     #[test]
     fn test_all_configs_disabled_error() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let templates_dir = temp_dir.path().join(".mklaunch/templates");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
 
         fs::create_dir_all(&templates_dir)?;
         fs::create_dir_all(&configs_dir)?;
@@ -406,8 +405,8 @@ mod tests {
     #[test]
     fn test_template_with_args_is_error() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let templates_dir = temp_dir.path().join(".vscode-debug/templates");
-        let configs_dir = temp_dir.path().join(".vscode-debug/configs");
+        let templates_dir = temp_dir.path().join(".mklaunch/templates");
+        let configs_dir = temp_dir.path().join(".mklaunch/configs");
 
         fs::create_dir_all(&templates_dir)?;
         fs::create_dir_all(&configs_dir)?;

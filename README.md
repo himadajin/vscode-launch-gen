@@ -18,7 +18,8 @@ This tool helps you manage complex debug configurations for VSCode by separating
 mklaunch [OPTIONS]
 
 Options:
-  -d, --dir <PATH>     Configuration directory path [default: .vscode-debug]
+      --templates <PATH>  Templates directory path [default: .mklaunch/templates]
+      --configs <PATH>    Configs directory path [default: .mklaunch/configs]
   -o, --output <PATH>  Output file path for generated launch.json [default: .vscode/launch.json]
   -v, --verbose        Enable verbose output
   -h, --help           Print help
@@ -28,7 +29,7 @@ Options:
 
 1. Create the configuration directory structure:
    ```
-   .vscode-debug/
+   .mklaunch/
    ├── templates/
    │   └── cpp.json
    └── configs/
@@ -107,7 +108,7 @@ mklaunch
 ### Custom configuration directory
 
 ```bash
-mklaunch --dir ./debug-configs
+mklaunch --templates ./debug-configs/templates --configs ./debug-configs/configs
 ```
 
 ### Custom output path
