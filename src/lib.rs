@@ -15,18 +15,20 @@ mod tests {
 
     fn create_test_generator(temp_dir: &TempDir) -> Generator {
         let base = temp_dir.path().join(".mklaunch");
-        Generator::new(base.join("templates"), base.join("configs"))
+        Generator::new(base.join("templates.json"), base.join("configs"))
     }
 
     fn setup_test_files(temp_dir: &TempDir) -> anyhow::Result<()> {
-        let templates_dir = temp_dir.path().join(".mklaunch/templates");
-        let configs_dir = temp_dir.path().join(".mklaunch/configs");
+        let base = temp_dir.path().join(".mklaunch");
+        let templates_manifest = base.join("templates.json");
+        let configs_dir = base.join("configs");
 
-        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&base)?;
         fs::create_dir_all(&configs_dir)?;
 
         // Create template
         let template = json!({
+            "name": "cpp",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/bin/myapp",
@@ -37,7 +39,12 @@ mod tests {
             "MIMode": "gdb"
         });
 
-        write_json(templates_dir.join("cpp.json"), &template)?;
+        write_json(
+            &templates_manifest,
+            &json!({
+                "templates": [template]
+            }),
+        )?;
 
         // Create config files (new schema with top-level args)
         let config1 = json!([
@@ -73,7 +80,7 @@ mod tests {
     fn test_load_template() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
         setup_test_files(&temp_dir)?;
-        let templates_dir = temp_dir.path().join(".mklaunch/templates");
+        let templates_manifest = temp_dir.path().join(".mklaunch/templates.json");
         let config = ConfigFile {
             name: "Dummy".to_string(),
             extends: "cpp".to_string(),
@@ -81,7 +88,7 @@ mod tests {
             base_args: None,
             args: None,
         };
-        let doc = LaunchConfig::from_template_and_config(&templates_dir, config, None)?;
+        let doc = LaunchConfig::from_template_and_config(&templates_manifest, config, None)?;
         let v = serde_json::to_value(doc)?;
         assert_eq!(v["type"], "cppdbg");
         assert_eq!(v["MIMode"], "gdb");
@@ -93,7 +100,7 @@ mod tests {
     fn test_load_template_not_found() {
         let temp_dir = TempDir::new().unwrap();
         setup_test_files(&temp_dir).unwrap();
-        let templates_dir = temp_dir.path().join(".mklaunch/templates");
+        let templates_manifest = temp_dir.path().join(".mklaunch/templates.json");
         let config = ConfigFile {
             name: "Dummy".to_string(),
             extends: "nonexistent".to_string(),
@@ -101,7 +108,7 @@ mod tests {
             base_args: None,
             args: None,
         };
-        let result = LaunchConfig::from_template_and_config(&templates_dir, config, None);
+        let result = LaunchConfig::from_template_and_config(&templates_manifest, config, None);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("not found"));
     }
@@ -170,8 +177,6 @@ mod tests {
 
     #[test]
     fn test_merge_config() -> anyhow::Result<()> {
-        let temp_dir = TempDir::new()?;
-
         let template = json!({
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/bin/myapp",
@@ -188,7 +193,7 @@ mod tests {
         };
 
         // Local helper: resolve using Resolver with in-memory template
-        let resolver = crate::generator::Resolver::new(temp_dir.path().join(".mklaunch/templates"));
+        let resolver = crate::generator::Resolver::new(crate::schema::TemplateFile::default());
         let ordered = resolver.resolve(config, Some(template))?;
         let merged = serde_json::to_value(ordered)?;
 
@@ -316,18 +321,20 @@ mod tests {
     #[test]
     fn test_disabled_config_excluded() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let templates_dir = temp_dir.path().join(".mklaunch/templates");
-        let configs_dir = temp_dir.path().join(".mklaunch/configs");
+        let base = temp_dir.path().join(".mklaunch");
+        let templates_manifest = base.join("templates.json");
+        let configs_dir = base.join("configs");
 
-        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&base)?;
         fs::create_dir_all(&configs_dir)?;
 
         // Create template
         let template = json!({
+            "name": "cpp",
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp"
         });
-        write_json(templates_dir.join("cpp.json"), &template)?;
+        write_json(&templates_manifest, &json!({ "templates": [template] }))?;
 
         // Create enabled config
         let enabled_config = json!([
@@ -364,18 +371,20 @@ mod tests {
     #[test]
     fn test_all_configs_disabled_error() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let templates_dir = temp_dir.path().join(".mklaunch/templates");
-        let configs_dir = temp_dir.path().join(".mklaunch/configs");
+        let base = temp_dir.path().join(".mklaunch");
+        let templates_manifest = base.join("templates.json");
+        let configs_dir = base.join("configs");
 
-        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&base)?;
         fs::create_dir_all(&configs_dir)?;
 
         // Create template
         let template = json!({
+            "name": "cpp",
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp"
         });
-        write_json(templates_dir.join("cpp.json"), &template)?;
+        write_json(&templates_manifest, &json!({ "templates": [template] }))?;
 
         // Create only disabled config
         let disabled_config = json!([
@@ -405,19 +414,21 @@ mod tests {
     #[test]
     fn test_template_with_args_is_error() -> anyhow::Result<()> {
         let temp_dir = TempDir::new()?;
-        let templates_dir = temp_dir.path().join(".mklaunch/templates");
-        let configs_dir = temp_dir.path().join(".mklaunch/configs");
+        let base = temp_dir.path().join(".mklaunch");
+        let templates_manifest = base.join("templates.json");
+        let configs_dir = base.join("configs");
 
-        fs::create_dir_all(&templates_dir)?;
+        fs::create_dir_all(&base)?;
         fs::create_dir_all(&configs_dir)?;
 
         // Template that wrongly includes args
         let bad_template = json!({
+            "name": "cpp",
             "type": "cppdbg",
             "program": "${workspaceFolder}/build/myapp",
             "args": ["--should-not-be-here"]
         });
-        write_json(templates_dir.join("cpp.json"), &bad_template)?;
+        write_json(&templates_manifest, &json!({ "templates": [bad_template] }))?;
 
         // Minimal config
         let config = json!([

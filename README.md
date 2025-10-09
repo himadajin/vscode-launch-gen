@@ -8,7 +8,7 @@ This tool helps you manage complex debug configurations for VSCode by separating
 
 ### How it works
 
-1. **Templates** (`templates/*.json`): Define common debugger settings like debugger type, executable path, etc.
+1. **Templates** (`templates.json` manifest): Define common debugger settings like debugger type, executable path, etc.
 2. **Configurations** (`configs/*.json`): Define specific execution conditions like command-line arguments, environment variables, etc.
 3. **Generation**: The tool merges templates with configurations to create a complete `launch.json` file.
 
@@ -18,7 +18,7 @@ This tool helps you manage complex debug configurations for VSCode by separating
 mklaunch [OPTIONS]
 
 Options:
-      --templates <PATH>  Templates directory path [default: .mklaunch/templates]
+      --templates <PATH>  Templates manifest path [default: .mklaunch/templates.json]
       --configs <PATH>    Configs directory path [default: .mklaunch/configs]
   -o, --output <PATH>  Output file path for generated launch.json [default: .vscode/launch.json]
   -v, --verbose        Enable verbose output
@@ -30,20 +30,24 @@ Options:
 1. Create the configuration directory structure:
    ```
    .mklaunch/
-   ├── templates/
-   │   └── cpp.json
+   ├── templates.json
    └── configs/
        ├── basic-test.json
        └── input-test.json
    ```
 
-2. Create a template file (`templates/cpp.json`):
+2. Define templates in `.mklaunch/templates.json`:
    ```json
    {
-     "type": "cppdbg",
-     "request": "launch",
-     "program": "${workspaceFolder}/build/myapp",
-     "MIMode": "gdb"
+     "templates": [
+       {
+         "name": "cpp",
+         "type": "cppdbg",
+         "request": "launch",
+         "program": "${workspaceFolder}/build/myapp",
+         "MIMode": "gdb"
+       }
+     ]
    }
    ```
 
@@ -108,7 +112,7 @@ mklaunch
 ### Custom configuration directory
 
 ```bash
-mklaunch --templates ./debug-configs/templates --configs ./debug-configs/configs
+mklaunch --templates ./debug-configs/templates.json --configs ./debug-configs/configs
 ```
 
 ### Custom output path
@@ -130,7 +134,7 @@ Every file inside the `configs/` directory must be a **JSON array** of configura
 Each configuration object supports the following fields:
 
 - **`name`** *(required)*: Unique configuration name displayed in VSCode.
-- **`extends`** *(required)*: Template name to use (without the `.json` suffix).
+- **`extends`** *(required)*: Template name defined in `templates.json`.
 - **`enabled`** *(required)*: Boolean flag to enable/disable this configuration.
 - **`baseArgs`** *(optional)*: Path to a JSON file containing `{ "args": [...] }`. These arguments are prepended.
 - **`args`** *(optional)*: Additional arguments appended after `baseArgs`.

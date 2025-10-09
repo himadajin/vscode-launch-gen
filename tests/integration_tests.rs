@@ -6,14 +6,16 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 fn create_test_files(base_dir: &Path) -> Result<()> {
-    let templates_dir = base_dir.join(".mklaunch/templates");
-    let configs_dir = base_dir.join(".mklaunch/configs");
+    let base = base_dir.join(".mklaunch");
+    let templates_manifest = base.join("templates.json");
+    let configs_dir = base.join("configs");
 
-    fs::create_dir_all(&templates_dir)?;
+    fs::create_dir_all(&base)?;
     fs::create_dir_all(&configs_dir)?;
 
     // Create cpp template
     let cpp_template = json!({
+        "name": "cpp",
         "type": "cppdbg",
         "request": "launch",
         "program": "${workspaceFolder}/build/bin/myapp",
@@ -33,13 +35,9 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
         "preLaunchTask": "build"
     });
 
-    fs::write(
-        templates_dir.join("cpp.json"),
-        serde_json::to_string_pretty(&cpp_template)?,
-    )?;
-
     // Create lldb template for macOS
     let lldb_template = json!({
+        "name": "lldb",
         "type": "lldb",
         "request": "launch",
         "program": "${workspaceFolder}/build/bin/myapp",
@@ -51,10 +49,14 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
     });
 
     fs::write(
-        templates_dir.join("lldb.json"),
-        serde_json::to_string_pretty(&lldb_template)?,
+        &templates_manifest,
+        serde_json::to_string_pretty(&json!({
+            "templates": [
+                cpp_template,
+                lldb_template
+            ]
+        }))?,
     )?;
-
     // Prepare a baseArgs file
     let base_args_path = base_dir.join("baseargs.json");
     fs::write(
@@ -125,11 +127,12 @@ fn create_test_files(base_dir: &Path) -> Result<()> {
 
 // Test helpers to reduce duplication across cases
 fn create_dirs(base_dir: &Path) -> Result<(PathBuf, PathBuf)> {
-    let templates_dir = base_dir.join(".mklaunch/templates");
-    let configs_dir = base_dir.join(".mklaunch/configs");
-    fs::create_dir_all(&templates_dir)?;
+    let base = base_dir.join(".mklaunch");
+    let templates_manifest = base.join("templates.json");
+    let configs_dir = base.join("configs");
+    fs::create_dir_all(&base)?;
     fs::create_dir_all(&configs_dir)?;
-    Ok((templates_dir, configs_dir))
+    Ok((templates_manifest, configs_dir))
 }
 
 fn write_json<P: AsRef<Path>>(path: P, value: &serde_json::Value) -> Result<()> {
@@ -143,7 +146,7 @@ fn test_full_generation_process() -> Result<()> {
     create_test_files(temp_dir.path())?;
 
     let base = temp_dir.path().join(".mklaunch");
-    let generator = Generator::new(base.join("templates"), base.join("configs"));
+    let generator = Generator::new(base.join("templates.json"), base.join("configs"));
 
     let launch = generator.generate()?;
     let v: serde_json::Value = serde_json::to_value(&launch)?;
@@ -217,14 +220,14 @@ fn test_error_missing_template() -> Result<()> {
     write_json(configs_dir.join("test.json"), &config)?;
 
     let base = temp_dir.path().join(".mklaunch");
-    let generator = Generator::new(base.join("templates"), base.join("configs"));
+    let generator = Generator::new(base.join("templates.json"), base.join("configs"));
 
     let result = generator.generate();
     assert!(result.is_err());
     let error_msg = result.unwrap_err().to_string();
     println!("Error message: {}", error_msg);
     assert!(
-        error_msg.contains("Templates directory does not exist") || error_msg.contains("not found")
+        error_msg.contains("Templates manifest does not exist") || error_msg.contains("not found")
     );
 
     Ok(())
@@ -233,11 +236,14 @@ fn test_error_missing_template() -> Result<()> {
 #[test]
 fn test_error_duplicate_names() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let (templates_dir, configs_dir) = create_dirs(temp_dir.path())?;
+    let (templates_manifest, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template
-    let template = json!({"type": "cppdbg"});
-    write_json(templates_dir.join("cpp.json"), &template)?;
+    let template = json!({
+        "name": "cpp",
+        "type": "cppdbg"
+    });
+    write_json(&templates_manifest, &json!({ "templates": [template] }))?;
 
     // Create two configs with same name
     let config1 = json!([
@@ -260,7 +266,7 @@ fn test_error_duplicate_names() -> Result<()> {
     write_json(configs_dir.join("config2.json"), &config2)?;
 
     let base = temp_dir.path().join(".mklaunch");
-    let generator = Generator::new(base.join("templates"), base.join("configs"));
+    let generator = Generator::new(base.join("templates.json"), base.join("configs"));
 
     let result = generator.generate();
     assert!(result.is_err());
@@ -277,14 +283,15 @@ fn test_error_duplicate_names() -> Result<()> {
 #[test]
 fn test_multiple_configs_in_single_file() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let (templates_dir, configs_dir) = create_dirs(temp_dir.path())?;
+    let (templates_manifest, configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template used by all entries
     let template = json!({
+        "name": "cpp",
         "type": "cppdbg",
         "program": "${workspaceFolder}/bin/app"
     });
-    write_json(templates_dir.join("cpp.json"), &template)?;
+    write_json(&templates_manifest, &json!({ "templates": [template] }))?;
 
     // Single file providing two enabled configurations
     let multi_config = json!([
@@ -304,7 +311,7 @@ fn test_multiple_configs_in_single_file() -> Result<()> {
     write_json(configs_dir.join("multi.json"), &multi_config)?;
 
     let base = temp_dir.path().join(".mklaunch");
-    let generator = Generator::new(base.join("templates"), base.join("configs"));
+    let generator = Generator::new(base.join("templates.json"), base.join("configs"));
 
     let launch = generator.generate()?;
     let v: serde_json::Value = serde_json::to_value(&launch)?;
@@ -365,14 +372,17 @@ fn test_error_invalid_extends() -> Result<()> {
 #[test]
 fn test_empty_configs_directory() -> Result<()> {
     let temp_dir = TempDir::new()?;
-    let (templates_dir, _configs_dir) = create_dirs(temp_dir.path())?;
+    let (templates_manifest, _configs_dir) = create_dirs(temp_dir.path())?;
 
     // Create template but no configs
-    let template = json!({"type": "cppdbg"});
-    write_json(templates_dir.join("cpp.json"), &template)?;
+    let template = json!({
+        "name": "cpp",
+        "type": "cppdbg"
+    });
+    write_json(&templates_manifest, &json!({ "templates": [template] }))?;
 
     let base = temp_dir.path().join(".mklaunch");
-    let generator = Generator::new(base.join("templates"), base.join("configs"));
+    let generator = Generator::new(base.join("templates.json"), base.join("configs"));
 
     let result = generator.generate();
     assert!(result.is_err());

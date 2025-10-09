@@ -1,4 +1,4 @@
-use crate::schema::{BaseArgsFile, ConfigFile, TemplateFile};
+use crate::schema::{BaseArgsFile, ConfigFile, Template, TemplateFile};
 use anyhow::{Context, Result};
 use serde::Serialize;
 use serde_json::{Map, Value};
@@ -27,23 +27,22 @@ pub struct LaunchConfig {
 impl LaunchConfig {
     /// Backward-compatible helper that delegates to `Resolver`.
     pub fn from_template_and_config(
-        templates_dir: &Path,
+        templates_manifest: &Path,
         config: ConfigFile,
         template_override: Option<Value>,
     ) -> Result<Self> {
-        let resolver = Resolver::new(templates_dir.to_path_buf());
+        let resolver = Resolver::new(TemplateFile::from_path(templates_manifest)?);
         resolver.resolve(config, template_override)
     }
 }
-
-/// Resolves `ConfigFile` into `LaunchConfig` using templates directory context.
+/// Resolves `ConfigFile` into `LaunchConfig` using templates manifest context.
 pub(crate) struct Resolver {
-    templates_dir: PathBuf,
+    templates: TemplateFile,
 }
 
 impl Resolver {
-    pub fn new(templates_dir: PathBuf) -> Self {
-        Self { templates_dir }
+    pub fn new(templates: TemplateFile) -> Self {
+        Self { templates }
     }
 
     /// Build a configuration from templates dir and ConfigFile.
@@ -54,16 +53,13 @@ impl Resolver {
         template_override: Option<Value>,
     ) -> Result<LaunchConfig> {
         let tmpl = match template_override {
-            Some(v) => TemplateFile::from_value(v)?,
-            None => {
-                let template_path = self.templates_dir.join(format!("{}.json", config.extends));
-                TemplateFile::from_path(&template_path)?
-            }
+            Some(v) => Template::from_value(v)?,
+            None => self.templates.get(&config.extends)?.clone(),
         };
-        self.build_from_template(config, tmpl)
+        Self::build_from_template(config, tmpl)
     }
 
-    fn build_from_template(&self, config: ConfigFile, tmpl: TemplateFile) -> Result<LaunchConfig> {
+    fn build_from_template(config: ConfigFile, tmpl: Template) -> Result<LaunchConfig> {
         // Build args: baseArgs (if any) + args (if any). Always present (can be empty)
         let mut args: Vec<String> = Vec::new();
         if let Some(base_path) = &config.base_args {
@@ -106,25 +102,25 @@ impl LaunchJson {
 
 /// Main generator for creating VSCode launch.json from templates and configs
 pub struct Generator {
-    templates_dir: PathBuf,
+    templates_path: PathBuf,
     configs_dir: PathBuf,
 }
 
 impl Generator {
     /// Creates a new generator instance with explicit templates/configs directories
-    pub fn new(templates_dir: PathBuf, configs_dir: PathBuf) -> Self {
+    pub fn new(templates_path: PathBuf, configs_dir: PathBuf) -> Self {
         Self {
-            templates_dir,
+            templates_path,
             configs_dir,
         }
     }
 
     /// Main generation process - reads configs, merges with templates, and returns LaunchJson
     pub fn generate(&self) -> Result<LaunchJson> {
-        if !self.templates_dir.exists() {
+        if !self.templates_path.exists() {
             anyhow::bail!(
-                "Templates directory does not exist: {}",
-                self.templates_dir.display()
+                "Templates manifest does not exist: {}",
+                self.templates_path.display()
             );
         }
 
@@ -153,7 +149,7 @@ impl Generator {
         validate_unique_names(&enabled_configs)?;
 
         let mut configurations: Vec<LaunchConfig> = Vec::new();
-        let resolver = Resolver::new(self.templates_dir.clone());
+        let resolver = Resolver::new(TemplateFile::from_path(&self.templates_path)?);
 
         for (config_path, config) in enabled_configs {
             let merged = resolver

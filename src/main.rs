@@ -11,8 +11,8 @@ use std::path::PathBuf;
 #[command(name = "mklaunch")]
 #[command(about = "Generate VSCode launch.json from template and config files")]
 struct Cli {
-    /// Templates directory path
-    #[arg(long, default_value = ".mklaunch/templates")]
+    /// Templates manifest path
+    #[arg(long, default_value = ".mklaunch/templates.json")]
     templates: PathBuf,
 
     /// Configs directory path

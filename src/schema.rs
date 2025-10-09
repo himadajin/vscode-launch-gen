@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -100,9 +101,9 @@ impl ConfigFile {
     }
 }
 
-/// Template file parsed from templates directory or in-memory JSON
-#[derive(Debug)]
-pub(crate) struct TemplateFile {
+/// Single template definition parsed from manifest or in-memory JSON
+#[derive(Debug, Clone)]
+pub(crate) struct Template {
     pub type_field: String,
     pub request: Option<String>,
     pub program: Option<String>,
@@ -110,20 +111,7 @@ pub(crate) struct TemplateFile {
     pub rest: Map<String, Value>,
 }
 
-impl TemplateFile {
-    pub fn from_path(template_path: &Path) -> Result<Self> {
-        if !template_path.exists() {
-            anyhow::bail!("Template file not found: {}", template_path.display());
-        }
-        let content = fs::read_to_string(template_path).with_context(|| {
-            format!("Failed to read template file: {}", template_path.display())
-        })?;
-        let v: Value = serde_json::from_str(&content).with_context(|| {
-            format!("Failed to parse template JSON: {}", template_path.display())
-        })?;
-        Self::from_value(v)
-    }
-
+impl Template {
     pub fn from_value(template: Value) -> Result<Self> {
         let template_obj = match template {
             Value::Object(obj) => obj,
@@ -168,5 +156,82 @@ impl TemplateFile {
             stop_at_entry,
             rest,
         })
+    }
+}
+
+/// Manifest containing multiple templates indexed by name
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TemplateFile {
+    templates: BTreeMap<String, Template>,
+}
+
+impl TemplateFile {
+    pub fn from_path(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            anyhow::bail!("Templates manifest does not exist: {}", path.display());
+        }
+
+        let content = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read templates manifest: {}", path.display()))?;
+
+        let root: Value = serde_json::from_str(&content)
+            .with_context(|| format!("Failed to parse templates manifest: {}", path.display()))?;
+
+        let templates_value = root.get("templates").ok_or_else(|| {
+            anyhow::anyhow!("Templates manifest must contain a 'templates' array")
+        })?;
+
+        let templates_array = templates_value
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("'templates' must be an array in {}", path.display()))?;
+
+        let mut templates = BTreeMap::new();
+        for (idx, entry) in templates_array.iter().enumerate() {
+            let mut object = entry.as_object().cloned().ok_or_else(|| {
+                anyhow::anyhow!("Template entry at index {} must be a JSON object", idx)
+            })?;
+
+            let name_value = object.remove("name").ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Template entry at index {} is missing required 'name' field",
+                    idx
+                )
+            })?;
+
+            let name = name_value.as_str().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Template entry at index {} must have 'name' as a string",
+                    idx
+                )
+            })?;
+
+            if templates.contains_key(name) {
+                anyhow::bail!(
+                    "Duplicate template name '{}' found in {}",
+                    name,
+                    path.display()
+                );
+            }
+
+            let template = Template::from_value(Value::Object(object))
+                .with_context(|| format!("Invalid template '{}'", name))?;
+
+            templates.insert(name.to_string(), template);
+        }
+
+        if templates.is_empty() {
+            anyhow::bail!(
+                "Templates manifest '{}' must define at least one template",
+                path.display()
+            );
+        }
+
+        Ok(Self { templates })
+    }
+
+    pub fn get(&self, name: &str) -> Result<&Template> {
+        self.templates
+            .get(name)
+            .ok_or_else(|| anyhow::anyhow!("Template '{}' not found in templates manifest", name))
     }
 }
